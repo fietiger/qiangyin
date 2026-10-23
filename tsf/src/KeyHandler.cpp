@@ -4,6 +4,54 @@
 
 namespace qy {
 
+namespace {
+// BMP 码点 → UTF-8（本项目用到的都在 3 字节区段）
+std::string ToUtf8(unsigned cp) {
+	std::string s;
+	s += static_cast<char>(0xE0 | (cp >> 12));
+	s += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+	s += static_cast<char>(0x80 | (cp & 0x3F));
+	return s;
+}
+
+// 全角块 U+FF01..U+FF5E 与 ASCII 0x21..0x7E 一一对应；空格单独映射 U+3000
+std::string FullWidthAscii(char c) {
+	if (c == ' ') return ToUtf8(0x3000);
+	if (c >= 0x21 && c <= 0x7E) return ToUtf8(0xFF00 + static_cast<unsigned char>(c));
+	return std::string();
+}
+
+// 英文直通模式下，该键在全角时应输出的全角字符（空串=该键不转）
+// 按 US 键盘布局把 VK(+Shift) 还原成 ASCII，再查全角块
+std::string FullWidthForKey(UINT vkey, bool shift) {
+	char c = 0;
+	if (vkey == VK_SPACE) {
+		c = ' ';
+	} else if (vkey >= 'A' && vkey <= 'Z') {
+		c = shift ? static_cast<char>(vkey) : static_cast<char>(vkey - 'A' + 'a');
+	} else if (vkey >= '0' && vkey <= '9') {
+		static const char kShiftDigits[] = "!@#$%^&*()";
+		c = shift ? kShiftDigits[vkey - '0'] : static_cast<char>(vkey);
+	} else {
+		switch (vkey) {
+		case VK_OEM_1:      c = shift ? ':'  : ';';  break;
+		case VK_OEM_PLUS:   c = shift ? '+'  : '=';  break;
+		case VK_OEM_COMMA:  c = shift ? '<'  : ',';  break;
+		case VK_OEM_MINUS:  c = shift ? '_'  : '-';  break;
+		case VK_OEM_PERIOD: c = shift ? '>'  : '.';  break;
+		case VK_OEM_2:      c = shift ? '?'  : '/';  break;
+		case VK_OEM_3:      c = shift ? '~'  : '`';  break;
+		case VK_OEM_4:      c = shift ? '{'  : '[';  break;
+		case VK_OEM_5:      c = shift ? '|'  : '\\'; break;
+		case VK_OEM_6:      c = shift ? '}'  : ']';  break;
+		case VK_OEM_7:      c = shift ? '"'  : '\''; break;
+		default: return std::string();
+		}
+	}
+	return FullWidthAscii(c);
+}
+} // namespace
+
 KeyHandler::KeyHandler(IKeyHandlerHost* host): host_(host) {}
 
 void KeyHandler::Reset() {
@@ -84,19 +132,34 @@ return false;
 }
 
 bool KeyHandler::WouldEatKey(UINT vkey, LPARAM /*lParam*/) const {
-if (HasCtrlAlt()) return false; // 快捷键一律放行
+	if (HasCtrlAlt()) return false; // 快捷键一律放行
 
-if (vkey == VK_SHIFT || vkey == VK_LSHIFT || vkey == VK_RSHIFT)
-return true; // Shift 点按用于切换，交由 HandleKeyUp 判定
+	if (vkey == VK_SHIFT || vkey == VK_LSHIFT || vkey == VK_RSHIFT)
+	return true; // Shift 点按用于切换，交由 HandleKeyUp 判定
 
-if (!chinese_) return false; // 英文模式：除了 Shift 都放行
+	// Shift+空格：全/半角切换（组字中不切，空格仍按选字处理）
+	if (vkey == VK_SPACE && !composing() && (GetKeyState(VK_SHIFT) & 0x8000))
+	return true;
 
-if (vkey >= 'A' && vkey <= 'Z') return true;
-if (vkey == VK_BACK) return composing(); // ★ 核心修复：组字中退格必吃
-if (vkey == VK_SPACE || vkey == VK_RETURN || vkey == VK_ESCAPE)
-return composing();
-if (vkey >= '1' && vkey <= '9') return composing();
-if (vkey == '0' || vkey == VK_OEM_1 || vkey == VK_OEM_7) return composing(); // 0/;/'
+	if (!chinese_) { // 英文模式
+	if (fullShape_) {
+		if (!FullWidthForKey(vkey, (GetKeyState(VK_SHIFT) & 0x8000) != 0).empty())
+		return true;
+	}
+	return false; // 其余按键放行
+	}
+
+	if (vkey >= 'A' && vkey <= 'Z') return true;
+	if (vkey == VK_BACK) return composing(); // ★ 核心修复：组字中退格必吃
+	if (vkey == VK_SPACE) return composing() || fullShape_; // 全角时空格出全角空格
+	if (vkey == VK_RETURN || vkey == VK_ESCAPE)
+	return composing();
+	{ // 数字：组字中选字；全角且无 Shift 时上全角数字（Shift+数字归标点表）
+	bool shiftNow = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+	if (vkey >= '1' && vkey <= '9') return composing() || (fullShape_ && !shiftNow);
+	if (vkey == '0') return composing() || (fullShape_ && !shiftNow);
+	}
+	if (vkey == VK_OEM_1 || vkey == VK_OEM_7) return composing(); // ;/' 选字
 	std::string dummy;
 	if (ChinesePunct() && IsPunctKey(vkey, dummy)) return true;
 	return false;
@@ -107,10 +170,24 @@ if (vkey == VK_SHIFT || vkey == VK_LSHIFT || vkey == VK_RSHIFT) {
 if (!shiftDown_) { shiftDown_ = true; shiftUsed_ = false;}
 return true; // 吃掉，等 KeyUp 再决定是否切换
 }
-if (shiftDown_) shiftUsed_ = true; // Shift 按住期间有其他键：不是点按
-if (HasCtrlAlt()) return false;
+	if (shiftDown_) shiftUsed_ = true; // Shift 按住期间有其他键：不是点按
+	if (HasCtrlAlt()) return false;
 
-if (!chinese_) return false;
+	// Shift+空格：切换全/半角（组字中不切，空格仍按选字上屏处理）
+	if (shiftDown_ && vkey == VK_SPACE && !composing()) {
+	fullShape_ = !fullShape_;
+	host_->OnFullShapeChanged(fullShape_);
+	return true;
+	}
+
+	if (!chinese_) {
+	// 全角模式：英文直通的字母/数字/符号/空格转全角上屏
+	if (fullShape_) {
+		std::string fw = FullWidthForKey(vkey, shiftDown_);
+		if (!fw.empty()) { host_->OnCommitText(fw); return true; }
+	}
+	return false;
+	}
 
 	if (vkey >= 'A' && vkey <= 'Z') {
 	bool start = buffer_.empty();
@@ -141,11 +218,14 @@ else host_->OnCompositionUpdated(buffer_);
 return true;
 }
 
-if (vkey == VK_SPACE) {
-if (!composing()) return false;
-CommitTopCandidate();
-return true;
-}
+	if (vkey == VK_SPACE) {
+	if (!composing()) {
+		if (fullShape_) { host_->OnCommitText(ToUtf8(0x3000)); return true; } // 全角空格
+		return false;
+	}
+	CommitTopCandidate();
+	return true;
+	}
 
 	if (vkey == VK_RETURN) {
 	if (!composing()) return false;
@@ -166,7 +246,13 @@ host_->OnCancelComposition();
 return true;
 }
 
-if ((vkey >= '1' && vkey <= '9') || vkey == '0' || vkey == VK_OEM_1 || vkey == VK_OEM_7) {
+	// 全角模式：非组字时数字直接上全角（Shift+数字走标点表出 ！＠＃ 等，不在此处理）
+	if (fullShape_ && !composing() && !shiftDown_ && vkey >= '0' && vkey <= '9') {
+	host_->OnCommitText(ToUtf8(0xFF10 + (vkey - '0')));
+	return true;
+	}
+
+	if ((vkey >= '1' && vkey <= '9') || vkey == '0' || vkey == VK_OEM_1 || vkey == VK_OEM_7) {
 if (!composing()) return false;
 auto cands = QueryCandidates();
 size_t idx = 0;

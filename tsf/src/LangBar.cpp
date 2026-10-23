@@ -161,7 +161,9 @@ STDMETHODIMP CQiangYinLangBarItem::GetTooltipString(BSTR* pbstrToolTip) {
 }
 
 // ---- ITfLangBarItemButton ----
-static const UINT kMenuIdSettings = 100;
+static const UINT kMenuIdSettings  = 100;
+static const UINT kMenuIdPunct     = 101;
+static const UINT kMenuIdFullShape = 102;
 
 STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const RECT*) {
     if (click == TF_LBI_CLK_LEFT) {
@@ -169,6 +171,13 @@ STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const REC
     } else if (click == TF_LBI_CLK_RIGHT && _host) {
         // 右键菜单：借用当前进程的焦点窗口当属主（weasel 同款做法）
         HMENU menu = CreatePopupMenu();
+        AppendMenuW(menu,
+                    MF_STRING | (_host->LangBarIsChinesePunct() ? MF_CHECKED : 0),
+                    kMenuIdPunct, L"中文标点(&P)");
+        AppendMenuW(menu,
+                    MF_STRING | (_host->LangBarIsFullShape() ? MF_CHECKED : 0),
+                    kMenuIdFullShape, L"全角模式(&F)");
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"设置(&S)...");
         HWND owner = GetFocus();
         if (!owner) owner = GetForegroundWindow();
@@ -176,7 +185,12 @@ STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const REC
             UINT cmd = TrackPopupMenuEx(menu,
                                         TPM_NONOTIFY | TPM_RETURNCMD | TPM_RIGHTBUTTON,
                                         pt.x, pt.y, owner, nullptr);
-            if (cmd == kMenuIdSettings) _host->OnLangBarOpenSettings();
+            switch (cmd) {
+            case kMenuIdPunct:     _host->OnLangBarTogglePunct(); break;
+            case kMenuIdFullShape: _host->OnLangBarToggleFullShape(); break;
+            case kMenuIdSettings:  _host->OnLangBarOpenSettings(); break;
+            default: break;
+            }
         }
         DestroyMenu(menu);
     }
@@ -184,15 +198,28 @@ STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const REC
 }
 
 STDMETHODIMP CQiangYinLangBarItem::InitMenu(ITfMenu* pMenu) {
-    // 浮动语言栏路径：把设置项加进系统传来的菜单
-    if (pMenu)
+    // 浮动语言栏路径：把菜单项加进系统传来的菜单
+    if (pMenu && _host) {
+        pMenu->AddMenuItem(kMenuIdPunct,
+                           _host->LangBarIsChinesePunct() ? TF_LBMENUF_CHECKED : 0,
+                           nullptr, nullptr, L"中文标点", 4, nullptr);
+        pMenu->AddMenuItem(kMenuIdFullShape,
+                           _host->LangBarIsFullShape() ? TF_LBMENUF_CHECKED : 0,
+                           nullptr, nullptr, L"全角模式", 4, nullptr);
         pMenu->AddMenuItem(kMenuIdSettings, 0, nullptr, nullptr,
                            L"设置(&S)...", 7, nullptr);
+    }
     return S_OK;
 }
 
 STDMETHODIMP CQiangYinLangBarItem::OnMenuSelect(UINT wID) {
-    if (wID == kMenuIdSettings && _host) _host->OnLangBarOpenSettings();
+    if (!_host) return S_OK;
+    switch (wID) {
+    case kMenuIdPunct:     _host->OnLangBarTogglePunct(); break;
+    case kMenuIdFullShape: _host->OnLangBarToggleFullShape(); break;
+    case kMenuIdSettings:  _host->OnLangBarOpenSettings(); break;
+    default: break;
+    }
     return S_OK;
 }
 

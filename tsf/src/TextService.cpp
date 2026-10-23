@@ -247,6 +247,7 @@ STDMETHODIMP CQiangYinTextService::Activate(ITfThreadMgr* ptim, TfClientId tid) 
     // 用户设置：注入 KeyHandler（指针，改设置原地生效）；默认中文模式在此应用
     settings_.Load();
     _keyHandler.SetSettings(&settings_);
+    _keyHandler.set_full_shape(settings_.fullShape);
     if (settings_.alwaysChinese) _keyHandler.set_chinese_mode(true);
 
     ITfSource* pSource = nullptr;
@@ -529,11 +530,41 @@ void CQiangYinTextService::OnLangBarToggleMode() {
     _keyHandler.SetChineseMode(!_keyHandler.chinese_mode());
 }
 
+// Shift+空格切换全/半角：持久化（KeyHandler 自己持有 fullShape_ 状态）
+void CQiangYinTextService::OnFullShapeChanged(bool full) {
+    settings_.fullShape = full;
+    settings_.Save();
+    wchar_t b[64];
+    wsprintfW(b, L"fullShape=%d saved", full ? 1 : 0);
+    qy::log::Write(b);
+}
+
+void CQiangYinTextService::OnLangBarTogglePunct() {
+    settings_.chinesePunct = !settings_.chinesePunct;
+    settings_.Save();
+}
+
+void CQiangYinTextService::OnLangBarToggleFullShape() {
+    bool nv = !_keyHandler.full_shape();
+    _keyHandler.set_full_shape(nv);
+    settings_.fullShape = nv;
+    settings_.Save();
+}
+
+bool CQiangYinTextService::LangBarIsChinesePunct() const {
+    return settings_.chinesePunct;
+}
+
+bool CQiangYinTextService::LangBarIsFullShape() const {
+    return _keyHandler.full_shape();
+}
+
 // 任务栏图标右键菜单 → 设置对话框（模态，运行在前台应用进程里）
 void CQiangYinTextService::OnLangBarOpenSettings() {
     Settings s = settings_;
     if (ShowSettingsDialog(GetFocus(), s)) {
         settings_ = s; // KeyHandler 持有的是本成员的指针，原地生效
+        _keyHandler.set_full_shape(settings_.fullShape);
         if (settings_.alwaysChinese && !_keyHandler.chinese_mode())
             _keyHandler.SetChineseMode(true);
         QYLOG("settings saved");

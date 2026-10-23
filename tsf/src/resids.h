@@ -9,3 +9,4 @@
 #define IDC_ENTER_CLEARS   1005
 #define IDC_ENTER_COMMIT   1006
 #define IDC_CAND_COMBO     1007
+#define IDC_FULL_SHAPE     1008

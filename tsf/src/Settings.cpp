@@ -18,6 +18,7 @@ void Settings::Load() {
     enterClears    = ReadDword(L"EnterClears", 1) != 0;
     alwaysChinese  = ReadDword(L"AlwaysChinese", 0) != 0;
     chinesePunct   = ReadDword(L"ChinesePunct", 1) != 0;
+    fullShape      = ReadDword(L"FullShape", 0) != 0;
     candidateCount = (ReadDword(L"CandidateCount", 10) == 5) ? 5 : 10;
 }
 
@@ -32,6 +33,7 @@ bool Settings::Save() const {
         {L"EnterClears",    enterClears ? 1u : 0u},
         {L"AlwaysChinese",  alwaysChinese ? 1u : 0u},
         {L"ChinesePunct",   chinesePunct ? 1u : 0u},
+        {L"FullShape",      fullShape ? 1u : 0u},
         {L"CandidateCount", static_cast<DWORD>(candidateCount)},
     };
     for (const auto& kv : vals)

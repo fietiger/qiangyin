@@ -68,10 +68,15 @@ public:
     void OnCommitText(const std::string& textUtf8) override;
     void OnCancelComposition() override;
     void OnModeChanged(bool chinese) override;
+    void OnFullShapeChanged(bool full) override; // Shift+空格切换全/半角
 
     // ILangBarHost（任务栏中/英图标交互）
     void OnLangBarToggleMode() override;
     void OnLangBarOpenSettings() override;
+    void OnLangBarTogglePunct() override;        // 右键菜单：中文标点
+    void OnLangBarToggleFullShape() override;    // 右键菜单：全角模式
+    bool LangBarIsChinesePunct() const override;
+    bool LangBarIsFullShape() const override;
 
     // edit session 回调（已有 ec）
     HRESULT OnEditStartComposition(TfEditCookie ec);

@@ -24,6 +24,7 @@ public:
     virtual void OnCommitText(const std::string& text) = 0;       // 上屏
     virtual void OnCancelComposition() = 0;
     virtual void OnModeChanged(bool chinese) = 0;
+    virtual void OnFullShapeChanged(bool full) = 0;               // 全/半角切换（宿主负责持久化）
 };
 
 class KeyHandler {
@@ -45,6 +46,8 @@ public:
     bool chinese_mode() const { return chinese_; }
     void set_chinese_mode(bool chinese) { chinese_ = chinese; } // 任务栏点中/英时同步
     void SetChineseMode(bool chinese); // 对外切换：组字中先上屏再切（供任务栏回调）
+    bool full_shape() const { return fullShape_; }
+    void set_full_shape(bool full) { fullShape_ = full; }       // Activate/设置对话框/任务栏菜单同步
     const std::string& buffer() const { return buffer_; }
     bool composing() const { return !buffer_.empty(); }
 
@@ -68,6 +71,7 @@ private:
     IKeyHandlerHost* host_;
     const Settings* settings_ = nullptr;
     bool chinese_ = true;      // 默认中文模式
+    bool fullShape_ = false;   // 全角模式：直通类按键输出全角（编码输入不受影响）
     std::string buffer_;       // 组字缓冲：a-z
     bool shiftDown_ = false;   // Shift 是否按下（用于点按检测）
     bool shiftUsed_ = false;   // Shift 按下期间有无其他按键

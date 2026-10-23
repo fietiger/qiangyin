@@ -16,6 +16,10 @@ class ILangBarHost {
 public:
     virtual void OnLangBarToggleMode() = 0;          // 任务栏图标左键：切换中/英
     virtual void OnLangBarOpenSettings() = 0;        // 任务栏图标右键菜单：设置
+    virtual void OnLangBarTogglePunct() = 0;         // 右键菜单：中文标点
+    virtual void OnLangBarToggleFullShape() = 0;     // 右键菜单：全角模式
+    virtual bool LangBarIsChinesePunct() const = 0;  // 菜单勾选状态
+    virtual bool LangBarIsFullShape() const = 0;
 protected:
     ~ILangBarHost() = default;
 };

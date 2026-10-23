@@ -16,6 +16,7 @@ INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         CheckDlgButton(h, IDC_AUTO_COMMIT,    s->autoCommitFull ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(h, IDC_CHINESE_PUNCT,  s->chinesePunct ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(h, IDC_ALWAYS_CHINESE, s->alwaysChinese ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(h, IDC_FULL_SHAPE,     s->fullShape ? BST_CHECKED : BST_UNCHECKED);
         CheckRadioButton(h, IDC_ENTER_CLEARS, IDC_ENTER_COMMIT,
                          s->enterClears ? IDC_ENTER_CLEARS : IDC_ENTER_COMMIT);
         HWND cb = GetDlgItem(h, IDC_CAND_COMBO);
@@ -34,6 +35,7 @@ INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             s->autoCommitFull= IsDlgButtonChecked(h, IDC_AUTO_COMMIT) == BST_CHECKED;
             s->chinesePunct  = IsDlgButtonChecked(h, IDC_CHINESE_PUNCT) == BST_CHECKED;
             s->alwaysChinese = IsDlgButtonChecked(h, IDC_ALWAYS_CHINESE) == BST_CHECKED;
+            s->fullShape     = IsDlgButtonChecked(h, IDC_FULL_SHAPE) == BST_CHECKED;
             s->enterClears   = IsDlgButtonChecked(h, IDC_ENTER_CLEARS) == BST_CHECKED;
             wchar_t buf[8] = {0};
             GetDlgItemTextW(h, IDC_CAND_COMBO, buf, 8);
