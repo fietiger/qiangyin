@@ -1,4 +1,6 @@
 // 强音 TSF 文本服务实现
+#include <new> // std::nothrow
+#include <utility> // std::move
 #include "TextService.h"
 #include "Guids.h"
 #include "Utf.h"

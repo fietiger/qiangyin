@@ -1,4 +1,5 @@
 // DLL 入口、类厂、注册/反注册
+#include <new> // std::nothrow
 #include <windows.h>
 #include <msctf.h>
 #include "TextService.h"
@@ -89,8 +90,10 @@ static HRESULT RegisterServer() {
                         KEY_WRITE, nullptr, &hKey, &disp) != ERROR_SUCCESS)
         return E_FAIL;
     // 默认值：描述
+    const wchar_t* desc = L"强音输入法";
     RegSetValueExW(hKey, nullptr, 0, REG_SZ,
-                   reinterpret_cast<const BYTE*>(L"强音输入法"), 12 * sizeof(wchar_t));
+                   reinterpret_cast<const BYTE*>(desc),
+                   (DWORD)(wcslen(desc) + 1) * sizeof(wchar_t));
     if (RegCreateKeyExW(hKey, L"InprocServer32", 0, nullptr, 0, KEY_WRITE,
                         nullptr, &hSub, &disp) == ERROR_SUCCESS) {
         RegSetValueExW(hSub, nullptr, 0, REG_SZ,
