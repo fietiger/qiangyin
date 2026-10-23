@@ -254,7 +254,7 @@ STDMETHODIMP CQiangYinTextService::Activate(ITfThreadMgr* ptim, TfClientId tid) 
         pKeystrokeMgr->Release();
     }
 
-    // 注册为显示属性提供者（组字下划线）
+    // 注册为显示属性提供者（组字下划线），并取显示属性 GUID 的 atom
     ITfCategoryMgr* pCat = nullptr;
     if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
                                    IID_ITfCategoryMgr,
@@ -262,6 +262,7 @@ STDMETHODIMP CQiangYinTextService::Activate(ITfThreadMgr* ptim, TfClientId tid) 
         pCat->RegisterCategory(CLSID_QiangYinTextService,
                                GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
                                CLSID_QiangYinTextService);
+        pCat->RegisterGUID(GUID_QiangYinDisplayAttr, &_gaDisplayAttr);
         pCat->Release();
     }
 
@@ -478,36 +479,20 @@ HRESULT CQiangYinTextService::OnEditStartComposition(TfEditCookie ec) {
     return S_OK;
 }
 
-static HRESULT SetRangeAttribute(TfEditCookie ec, ITfContext* pic, ITfRange* range) {
-    // 给组字区间加上我们的下划线显示属性
-    ITfDisplayAttributeMgr* pMgr = nullptr;
-    HRESULT hr = CoCreateInstance(CLSID_TF_DisplayAttributeMgr, nullptr, CLSCTX_INPROC_SERVER,
-                                  IID_ITfDisplayAttributeMgr,
-                                  reinterpret_cast<void**>(&pMgr));
-    if (FAILED(hr)) return hr;
-    ITfDisplayAttributeInfo* pInfo = nullptr;
-    TfGuidAtom atom = TF_INVALID_GUIDATOM;
-#ifdef __MINGW32__
-    // mingw-w64 的 msctf.h 把第三个参数误声明为 CLSID*，
-    // MS SDK 原生是 TfGuidAtom*（已知头文件 bug，vtable 布局一致）
-    hr = pMgr->GetDisplayAttributeInfo(GUID_QiangYinDisplayAttr, &pInfo,
-                                      reinterpret_cast<CLSID*>(&atom));
-#else
-    hr = pMgr->GetDisplayAttributeInfo(GUID_QiangYinDisplayAttr, &pInfo, &atom);
-#endif
-    if (SUCCEEDED(hr)) {
-        ITfProperty* pProp = nullptr;
-        if (SUCCEEDED(pic->GetProperty(GUID_PROP_ATTRIBUTE, &pProp))) {
-            VARIANT var;
-            var.vt = VT_I4;
-            var.lVal = atom;
-            pProp->SetValue(ec, range, &var);
-            pProp->Release();
-        }
-        pInfo->Release();
+static void SetRangeAttribute(TfEditCookie ec, ITfContext* pic, ITfRange* range,
+                              TfGuidAtom gaDisplayAttr) {
+    // 给组字区间加上我们的下划线显示属性（写法参照 rime/weasel）：
+    // GUID_PROP_ATTRIBUTE 属性的值就是显示属性 GUID 的 TfGuidAtom，
+    // TSF 看到后会回调我们的 ITfDisplayAttributeProvider 取具体样式。
+    if (gaDisplayAttr == TF_INVALID_GUIDATOM) return;
+    ITfProperty* pProp = nullptr;
+    if (SUCCEEDED(pic->GetProperty(GUID_PROP_ATTRIBUTE, &pProp)) && pProp) {
+        VARIANT var;
+        var.vt = VT_I4; // TfGuidAtom
+        var.lVal = (LONG)gaDisplayAttr;
+        pProp->SetValue(ec, range, &var);
+        pProp->Release();
     }
-    pMgr->Release();
-    return S_OK;
 }
 
 HRESULT CQiangYinTextService::OnEditUpdateComposition(TfEditCookie ec,
@@ -518,7 +503,7 @@ HRESULT CQiangYinTextService::OnEditUpdateComposition(TfEditCookie ec,
     if (FAILED(_pComposition->GetRange(&pRange)) || !pRange) return S_OK;
 
     pRange->SetText(ec, 0, text.c_str(), (LONG)text.size());
-    SetRangeAttribute(ec, _pContext, pRange);
+    SetRangeAttribute(ec, _pContext, pRange, _gaDisplayAttr);
 
     // 光标移到组字末尾
     pRange->Collapse(ec, TF_ANCHOR_END);

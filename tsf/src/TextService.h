@@ -87,6 +87,7 @@ private:
     bool _composing = false;
 
     DWORD _dwThreadMgrSinkCookie = TF_INVALID_COOKIE;
+TfGuidAtom _gaDisplayAttr = TF_INVALID_GUIDATOM;
 
     KeyHandler _keyHandler;
     Engine _engine;
