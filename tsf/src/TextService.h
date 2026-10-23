@@ -4,12 +4,13 @@
 //       ITfCompositionSink / ITfDisplayAttributeProvider / IKeyHandlerHost
 // 不用 ATL，手写 COM（保证 mingw 也能编译检查）。
 #include <windows.h>
-#include "TsfCompat.h" // msctf.h + mingw 缺失声明的补齐
+#include "TsfCompat.h" // msctf.h + ctfutb.h + mingw 缺失声明的补齐
 #include <string>
 #include <vector>
 #include "KeyHandler.h"
 #include "Engine.h"
 #include "CandidateWindow.h"
+#include "LangBar.h"
 
 namespace qy {
 
@@ -20,7 +21,8 @@ class CQiangYinTextService :
     public ITfCompositionSink,
     public ITfDisplayAttributeProvider,
     public ITfCompartmentEventSink,
-    public IKeyHandlerHost
+    public IKeyHandlerHost,
+    public ILangBarHost
 {
 public:
     CQiangYinTextService();
@@ -66,6 +68,9 @@ public:
     void OnCancelComposition() override;
     void OnModeChanged(bool chinese) override;
 
+    // ILangBarHost（任务栏中/英图标左键点击）
+    void OnLangBarToggleMode() override;
+
     // edit session 回调（已有 ec）
     HRESULT OnEditStartComposition(TfEditCookie ec);
     HRESULT OnEditUpdateComposition(TfEditCookie ec, const std::wstring& text);
@@ -80,6 +85,8 @@ private:
     void UpdateCandidateWindow(TfEditCookie ec, ITfRange* range);
     void HideCandidates();
     std::vector<std::wstring> CurrentCandidateTexts();
+    void InitLangBar();   // Activate：添加任务栏中/英指示项
+    void UninitLangBar(); // Deactivate：移除
 
     static std::vector<qy::Candidate> EngineQueryTrampoline(const std::string& prefix, void* ctx);
 
@@ -91,10 +98,12 @@ private:
     bool _composing = false;
 
     DWORD _dwThreadMgrSinkCookie = TF_INVALID_COOKIE;
-    // 中/英转换模式 compartment（任务栏徽标的数据源）
+    // 中/英转换模式 compartment（状态数据源，供系统组件读取）
     ITfCompartment* _pConvCompartment = nullptr;
     DWORD _dwConvSinkCookie = TF_INVALID_COOKIE;
     void SetConversionModeCompartment(bool chinese);
+    // 任务栏中/英指示（GUID_LBI_INPUTMODE 语言栏项，图标真正显示靠它）
+    CQiangYinLangBarItem* _pLangBarItem = nullptr;
 TfGuidAtom _gaDisplayAttr = TF_INVALID_GUIDATOM;
 
     KeyHandler _keyHandler;

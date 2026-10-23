@@ -161,6 +161,10 @@ static HRESULT RegisterServer() {
         pCat->RegisterCategory(CLSID_QiangYinTextService,
                                GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
                                CLSID_QiangYinTextService);
+        // 输入模式 compartment 能力：任务栏中/英指示需要（weasel/mozc 都注册）
+        pCat->RegisterCategory(CLSID_QiangYinTextService,
+                               GUID_TFCAT_TIPCAP_INPUTMODECOMPARTMENT,
+                               CLSID_QiangYinTextService);
         pCat->Release();
     }
     return hr;
@@ -196,6 +200,9 @@ static HRESULT UnregisterServer() {
                                  CLSID_QiangYinTextService);
         pCat->UnregisterCategory(CLSID_QiangYinTextService,
                                  GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
+                                 CLSID_QiangYinTextService);
+        pCat->UnregisterCategory(CLSID_QiangYinTextService,
+                                 GUID_TFCAT_TIPCAP_INPUTMODECOMPARTMENT,
                                  CLSID_QiangYinTextService);
         pCat->Release();
     }

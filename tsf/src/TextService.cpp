@@ -280,6 +280,10 @@ STDMETHODIMP CQiangYinTextService::Activate(ITfThreadMgr* ptim, TfClientId tid) 
         pCat->RegisterCategory(CLSID_QiangYinTextService,
                                GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
                                CLSID_QiangYinTextService);
+        // 声明“输入模式 compartment”能力：任务栏中/英指示需要（weasel/mozc 都注册）
+        pCat->RegisterCategory(CLSID_QiangYinTextService,
+                               GUID_TFCAT_TIPCAP_INPUTMODECOMPARTMENT,
+                               CLSID_QiangYinTextService);
         pCat->RegisterGUID(GUID_QiangYinDisplayAttr, &_gaDisplayAttr);
         pCat->Release();
     }
@@ -305,6 +309,9 @@ STDMETHODIMP CQiangYinTextService::Activate(ITfThreadMgr* ptim, TfClientId tid) 
         pCompMgr->Release();
     }
 
+    // 任务栏中/英指示：添加 GUID_LBI_INPUTMODE 语言栏项（显示靠它，不是 compartment）
+    InitLangBar();
+
     // 取当前顶层 context
     ITfDocumentMgr* pDocMgr = nullptr;
     if (SUCCEEDED(_pThreadMgr->GetFocus(&pDocMgr)) && pDocMgr) {
@@ -318,6 +325,9 @@ STDMETHODIMP CQiangYinTextService::Deactivate() {
     QYLOG("Deactivate called");
     HideCandidates();
     _keyHandler.Reset();
+
+    // 先移除任务栏中/英指示项（要用 _pThreadMgr QI 出来的 mgr）
+    UninitLangBar();
 
     // 解除转换模式 compartment 订阅
     if (_pConvCompartment) {
@@ -502,8 +512,48 @@ void CQiangYinTextService::OnModeChanged(bool chinese) {
     wchar_t buf[64];
     wsprintfW(buf, L"[qiangyin] mode=%s\n", chinese ? L"CN" : L"EN");
     OutputDebugStringW(buf);
-    // Shift 切换后同步到系统 compartment，任务栏徽标跟着变
+    // Shift 切换后同步到系统 compartment（数据源）
     SetConversionModeCompartment(chinese);
+    // 任务栏中/英图标跟着变（通知系统重取 GetIcon）
+    if (_pLangBarItem) _pLangBarItem->SetChineseMode(chinese);
+}
+
+void CQiangYinTextService::OnLangBarToggleMode() {
+    _keyHandler.SetChineseMode(!_keyHandler.chinese_mode());
+}
+
+// 添加任务栏中/英指示项：item GUID 必须是 GUID_LBI_INPUTMODE，
+// 否则系统只当普通语言栏按钮，不会显示在任务栏输入指示器里。
+void CQiangYinTextService::InitLangBar() {
+    if (_pLangBarItem) return;
+    ITfLangBarItemMgr* pMgr = nullptr;
+    if (FAILED(_pThreadMgr->QueryInterface(IID_ITfLangBarItemMgr,
+                                           reinterpret_cast<void**>(&pMgr))) || !pMgr) {
+        QYLOG("InitLangBar: no ITfLangBarItemMgr");
+        return;
+    }
+    _pLangBarItem = new (std::nothrow) CQiangYinLangBarItem(
+        static_cast<ILangBarHost*>(this), _keyHandler.chinese_mode());
+    if (!_pLangBarItem) { pMgr->Release(); return; }
+    HRESULT hr = pMgr->AddItem(_pLangBarItem);
+    wchar_t b[64];
+    wsprintfW(b, L"InitLangBar AddItem hr=0x%08X", (DWORD)hr);
+    qy::log::Write(b);
+    pMgr->Release();
+}
+
+void CQiangYinTextService::UninitLangBar() {
+    if (!_pLangBarItem) return;
+    if (_pThreadMgr) {
+        ITfLangBarItemMgr* pMgr = nullptr;
+        if (SUCCEEDED(_pThreadMgr->QueryInterface(IID_ITfLangBarItemMgr,
+                                                  reinterpret_cast<void**>(&pMgr))) && pMgr) {
+            pMgr->RemoveItem(_pLangBarItem);
+            pMgr->Release();
+        }
+    }
+    _pLangBarItem->Release(); // mgr 持有引用已随 RemoveItem 释放
+    _pLangBarItem = nullptr;
 }
 
 // 把中英状态写入系统转换模式 compartment（任务栏中/英徽标的数据源）

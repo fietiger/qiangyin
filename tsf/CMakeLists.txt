@@ -15,6 +15,7 @@ set(SRCS
     src/KeyHandler.cpp
     src/TextService.cpp
     src/CandidateWindow.cpp
+    src/LangBar.cpp
     src/dllmain.cpp
     src/qiangyin_ime.def
     qiangyin.rc
