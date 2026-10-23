@@ -1,7 +1,7 @@
 //! 基于真实码表 data/mb.txt 的集成测试。
 //! 运行：cargo test
 
-use ime_engine::Engine;
+use qiangyin::Engine;
 
 fn real_engine() -> Engine {
     Engine::load(&["data/mb.txt"]).expect("加载 data/mb.txt 失败")

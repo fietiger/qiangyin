@@ -1,13 +1,14 @@
 [package]
-name = "ime-engine"
+name = "qiangyin"
 version = "0.1.0"
 edition = "2021"
-description = "超强音形输入法查词引擎原型：trie 索引 + 前缀查询（纯 Rust，无外部依赖）"
+description = "强音输入法查词引擎：trie 索引 + 前缀查询，纯 Rust，可导出 C ABI 给 TSF 外壳调用"
 
 [lib]
-name = "ime_engine"
+name = "qiangyin"
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "ime-demo"
+name = "qiangyin-demo"
 path = "src/main.rs"

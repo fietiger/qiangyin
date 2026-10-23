@@ -1,11 +1,13 @@
-//! 超强音形输入法查词引擎原型。
+//! 强音输入法查词引擎。
 //!
 //! - 从文本码表（`编码 文本`，每行一条）加载全部条目
 //! - 用 trie 按编码建立索引，支持按键过程中的前缀查询
 //! - 候选排序：精确匹配（编码长度 == 输入长度）优先，其余按码表原有顺序
 //!
-//! 这是纯逻辑层：不依赖任何操作系统 API，将来 TSF 外壳（C++）
-//! 可以通过 FFI（cdylib）调用它，或把逻辑平移到 C++。
+//! 这是纯逻辑层：不依赖任何操作系统 API。`ffi` 模块把它导出为 C ABI，
+//! C++ TSF 外壳可直接链接调用（见 `ffi/qiangyin.h`）。
+
+pub mod ffi;
 
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -44,15 +46,26 @@ pub struct Engine {
 }
 
 impl Engine {
+    /// 创建空引擎（配合 `load_files` 增量加载，FFI 用）。
+    pub fn new() -> Self {
+        Engine {
+            entries: Vec::new(),
+            root: Node::new(),
+            skipped_lines: 0,
+        }
+    }
+
     /// 从一个或多个码表文件加载（后面的文件追加在后面，用户词库可放在最后）。
     ///
     /// 文件格式：每行 `编码 文本`（空格分隔），`#` 开头为注释，空行忽略。
     pub fn load(paths: &[&str]) -> Result<Self, String> {
-        let mut engine = Engine {
-            entries: Vec::new(),
-            root: Node::new(),
-            skipped_lines: 0,
-        };
+        let mut engine = Engine::new();
+        engine.load_files(paths)?;
+        Ok(engine)
+    }
+
+    /// 向已有引擎追加码表文件（`load` 的增量版本）。
+    pub fn load_files(&mut self, paths: &[&str]) -> Result<(), String> {
         for path in paths {
             let file = File::open(path).map_err(|e| format!("打不开 {path}: {e}"))?;
             for (lineno, line) in BufReader::new(file).lines().enumerate() {
@@ -65,18 +78,18 @@ impl Engine {
                 let code = parts.next().unwrap_or("");
                 let text = parts.next().unwrap_or("").trim();
                 if !is_valid_code(code) || text.is_empty() {
-                    engine.skipped_lines += 1;
+                    self.skipped_lines += 1;
                     continue;
                 }
-                let idx = engine.entries.len();
-                engine.entries.push(Entry {
+                let idx = self.entries.len();
+                self.entries.push(Entry {
                     code: code.to_string(),
                     text: text.to_string(),
                 });
-                engine.insert(idx, code.as_bytes());
+                self.insert(idx, code.as_bytes());
             }
         }
-        Ok(engine)
+        Ok(())
     }
 
     fn insert(&mut self, idx: usize, code: &[u8]) {

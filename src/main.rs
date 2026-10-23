@@ -6,13 +6,13 @@
 //!
 //!   echo "aab" | cargo run -- data/mb.txt data/usercode.txt   # 追加用户词库
 
-use ime_engine::Engine;
+use qiangyin::Engine;
 use std::io::{self, BufRead};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
-        eprintln!("用法: ime-demo <码表文件> [更多码表文件...]");
+        eprintln!("用法: qiangyin-demo <码表文件> [更多码表文件...]");
         std::process::exit(1);
     }
     let paths: Vec<&str> = args.iter().map(String::as_str).collect();
