@@ -215,6 +215,8 @@ STDMETHODIMP CQiangYinTextService::QueryInterface(REFIID riid, void** ppv) {
         *ppv = static_cast<ITfCompositionSink*>(this);
     } else if (IsEqualIID(riid, IID_ITfDisplayAttributeProvider)) {
         *ppv = static_cast<ITfDisplayAttributeProvider*>(this);
+    } else if (IsEqualIID(riid, IID_ITfCompartmentEventSink)) {
+        *ppv = static_cast<ITfCompartmentEventSink*>(this);
     } else {
         *ppv = nullptr;
         return E_NOINTERFACE;
@@ -282,6 +284,27 @@ STDMETHODIMP CQiangYinTextService::Activate(ITfThreadMgr* ptim, TfClientId tid) 
         pCat->Release();
     }
 
+    // 中/英转换模式 compartment：任务栏徽标的数据源
+    // TF_CONVERSIONMODE_NATIVE=1 显示"中"，TF_CONVERSIONMODE_ALPHANUMERIC 显示"英"
+    ITfCompartmentMgr* pCompMgr = nullptr;
+    if (SUCCEEDED(_pThreadMgr->QueryInterface(IID_ITfCompartmentMgr,
+                                              reinterpret_cast<void**>(&pCompMgr)))) {
+        if (SUCCEEDED(pCompMgr->GetCompartment(GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION,
+                                               &_pConvCompartment)) && _pConvCompartment) {
+            SetConversionModeCompartment(_keyHandler.chinese_mode());
+            // 订阅：用户在任务栏点中/英时 OnChange 被回调
+            ITfSource* pConvSrc = nullptr;
+            if (SUCCEEDED(_pConvCompartment->QueryInterface(IID_ITfSource,
+                                                           reinterpret_cast<void**>(&pConvSrc)))) {
+                pConvSrc->AdviseSink(IID_ITfCompartmentEventSink,
+                                     static_cast<ITfCompartmentEventSink*>(this),
+                                     &_dwConvSinkCookie);
+                pConvSrc->Release();
+            }
+        }
+        pCompMgr->Release();
+    }
+
     // 取当前顶层 context
     ITfDocumentMgr* pDocMgr = nullptr;
     if (SUCCEEDED(_pThreadMgr->GetFocus(&pDocMgr)) && pDocMgr) {
@@ -295,6 +318,20 @@ STDMETHODIMP CQiangYinTextService::Deactivate() {
     QYLOG("Deactivate called");
     HideCandidates();
     _keyHandler.Reset();
+
+    // 解除转换模式 compartment 订阅
+    if (_pConvCompartment) {
+        ITfSource* pConvSrc = nullptr;
+        if (SUCCEEDED(_pConvCompartment->QueryInterface(IID_ITfSource,
+                                                       reinterpret_cast<void**>(&pConvSrc)))) {
+            if (_dwConvSinkCookie != TF_INVALID_COOKIE)
+                pConvSrc->UnadviseSink(_dwConvSinkCookie);
+            pConvSrc->Release();
+        }
+        _pConvCompartment->Release();
+        _pConvCompartment = nullptr;
+        _dwConvSinkCookie = TF_INVALID_COOKIE;
+    }
 
     if (_pThreadMgr) {
         ITfSource* pSource = nullptr;
@@ -465,6 +502,41 @@ void CQiangYinTextService::OnModeChanged(bool chinese) {
     wchar_t buf[64];
     wsprintfW(buf, L"[qiangyin] mode=%s\n", chinese ? L"CN" : L"EN");
     OutputDebugStringW(buf);
+    // Shift 切换后同步到系统 compartment，任务栏徽标跟着变
+    SetConversionModeCompartment(chinese);
+}
+
+// 把中英状态写入系统转换模式 compartment（任务栏中/英徽标的数据源）
+void CQiangYinTextService::SetConversionModeCompartment(bool chinese) {
+    if (!_pConvCompartment) return;
+    VARIANT v;
+    VariantInit(&v);
+    v.vt = VT_I4;
+    // 中文：TF_CONVERSIONMODE_NATIVE；英文：TF_CONVERSIONMODE_ALPHANUMERIC
+    v.lVal = chinese ? TF_CONVERSIONMODE_NATIVE : TF_CONVERSIONMODE_ALPHANUMERIC;
+    _pConvCompartment->SetValue(_tfClientId, &v);
+    wchar_t b[64];
+    wsprintfW(b, L"SetConversionMode chinese=%d", chinese ? 1 : 0);
+    qy::log::Write(b);
+}
+
+// ITfCompartmentEventSink：用户在任务栏点了中/英徽标，同步回内部状态
+STDMETHODIMP CQiangYinTextService::OnChange(REFGUID rguid) {
+    if (!IsEqualGUID(rguid, GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION))
+        return S_OK;
+    if (!_pConvCompartment) return S_OK;
+    VARIANT v;
+    VariantInit(&v);
+    if (SUCCEEDED(_pConvCompartment->GetValue(&_tfClientId, &v)) && v.vt == VT_I4) {
+        bool chinese = (v.lVal & TF_CONVERSIONMODE_NATIVE) != 0;
+        // SetChineseMode 内部会处理组字中先上屏；OnModeChanged 回写 compartment 是等幂的
+        _keyHandler.SetChineseMode(chinese);
+        wchar_t b[64];
+        wsprintfW(b, L"OnChange conversionmode chinese=%d", chinese ? 1 : 0);
+        qy::log::Write(b);
+    }
+    VariantClear(&v);
+    return S_OK;
 }
 
 HRESULT CQiangYinTextService::RequestEditSession(DWORD flags, ITfEditSession* session) {

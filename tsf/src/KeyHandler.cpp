@@ -31,12 +31,17 @@ buffer_.clear();
 }
 
 void KeyHandler::ToggleMode() {
-if (composing()) {
-// 切换前先把组字上屏，避免中英文切换丢组字——这正是原 bug 的场景
-CommitTopCandidate();
+    SetChineseMode(!chinese_);
 }
-chinese_ =!chinese_;
-host_->OnModeChanged(chinese_);
+
+void KeyHandler::SetChineseMode(bool chinese) {
+    if (chinese == chinese_) return;
+    if (composing()) {
+        // 切换前先把组字上屏，避免中英文切换丢组字——这正是原 bug 的场景
+        CommitTopCandidate();
+    }
+    chinese_ = chinese;
+    host_->OnModeChanged(chinese_);
 }
 
 // 中文标点映射（v0.1 固定表；引号配对等以后再说）

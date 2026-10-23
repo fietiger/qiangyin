@@ -19,6 +19,7 @@ class CQiangYinTextService :
     public ITfKeyEventSink,
     public ITfCompositionSink,
     public ITfDisplayAttributeProvider,
+    public ITfCompartmentEventSink,
     public IKeyHandlerHost
 {
 public:
@@ -55,6 +56,9 @@ public:
     STDMETHODIMP EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo** ppEnum) override;
     STDMETHODIMP GetDisplayAttributeInfo(REFGUID guid, ITfDisplayAttributeInfo** ppInfo) override;
 
+    // ITfCompartmentEventSink（任务栏点中/英时系统回调）
+    STDMETHODIMP OnChange(REFGUID rguid) override;
+
     // IKeyHandlerHost（被 KeyHandler 回调；内部再开 edit session 落到 TSF）
     void OnCompositionStarted() override;
     void OnCompositionUpdated(const std::string& bufferUtf8) override;
@@ -87,6 +91,10 @@ private:
     bool _composing = false;
 
     DWORD _dwThreadMgrSinkCookie = TF_INVALID_COOKIE;
+    // 中/英转换模式 compartment（任务栏徽标的数据源）
+    ITfCompartment* _pConvCompartment = nullptr;
+    DWORD _dwConvSinkCookie = TF_INVALID_COOKIE;
+    void SetConversionModeCompartment(bool chinese);
 TfGuidAtom _gaDisplayAttr = TF_INVALID_GUIDATOM;
 
     KeyHandler _keyHandler;

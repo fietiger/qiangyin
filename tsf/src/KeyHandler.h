@@ -39,6 +39,8 @@ public:
 
     void Reset(); // 焦点切换/强制重置：清空组字缓冲等临时状态
     bool chinese_mode() const { return chinese_; }
+    void set_chinese_mode(bool chinese) { chinese_ = chinese; } // 任务栏点中/英时同步
+    void SetChineseMode(bool chinese); // 对外切换：组字中先上屏再切（供任务栏回调）
     const std::string& buffer() const { return buffer_; }
     bool composing() const { return !buffer_.empty(); }
 
