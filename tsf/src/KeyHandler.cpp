@@ -41,21 +41,39 @@ host_->OnModeChanged(chinese_);
 
 // 中文标点映射（v0.1 固定表；引号配对等以后再说）
 bool KeyHandler::IsPunctKey(UINT vkey, std::string& outUtf8) const {
-struct Map { UINT vk; const char* zh;};
+struct Map { UINT vk; const char* zh; const char* zhShift; };
 static const Map kMap[] = {
-{ VK_OEM_COMMA, "\xEF\xBC\x8C"}, // ，
-{ VK_OEM_PERIOD, "\xE3\x80\x82"}, // 。
-{ VK_OEM_2, "\xE3\x80\x81"}, // 、
-{ VK_OEM_1, "\xEF\xBC\x9B"}, // ；
-{ VK_OEM_3, "\xEF\xBD\x9E"}, // ～
-{ VK_OEM_4, "\xE3\x80\x90"}, //
-{ VK_OEM_5, "\xE3\x80\x81"}, // 、
-{ VK_OEM_7, "\xE2\x80\x99"}, //’
+// vk, 无Shift, Shift+该键（按用户配置表 [-非编码符号转义定义表-]）
+{ VK_OEM_COMMA, "\xEF\xBC\x8C", "\xE3\x80\x8A\xE3\x80\x88"}, // ，→《〈
+{ VK_OEM_PERIOD, "\xE3\x80\x82", "\xE3\x80\x89\xE3\x80\x8A"}, // 。→〉》
+{ VK_OEM_2, "\xE3\x80\x81", "\xEF\xBC\x9F"}, // 、→？
+{ VK_OEM_1, "\xEF\xBC\x9B", "\xEF\xBC\x9A"}, // ；→：
+{ VK_OEM_3, "\xEF\xBD\x9E", "\x7E"}, // ～→~
+{ VK_OEM_4, "\xE3\x80\x90", "\x7B"}, // →{
+{ VK_OEM_5, "\xE3\x80\x81", "\xE4\xB8\xA8"}, // 、→·
+{ VK_OEM_7, "\xE2\x80\x99", "\xE2\x80\x9C"}, // ’→“
+{ VK_OEM_MINUS, "\xEF\xBC\x8D", "\xE2\x80\x94\xE2\x80\x94"}, // －→——
+{ VK_OEM_PLUS, "\xEF\xBC\x8B", "\x2B"}, // ＋→+
+{ VK_OEM_4, "\xE3\x80\x90", "\x7B"}, // （→{
+{ VK_OEM_6, "\xE3\x80\x91", "\x7D"}, // ）→}
 };
-// 注：数字行带 Shift 的标点（!@# 等）v0.1 不处理——Shift 按住期间的按键
-// 会被 shiftUsed_ 标记，不会触发点按切换；字符本身放行给程序。
+// 数字行 Shift 标点（按配置表）
+if (shiftDown_) {
+switch (vkey) {
+case '1': outUtf8 = "\xEF\xBC\x81"; return true; // ！
+case '2': outUtf8 = "\x40"; return true; // @
+case '3': outUtf8 = "\x23"; return true; // #
+case '4': outUtf8 = "\xEF\xBF\xA5"; return true; // ￥
+case '5': outUtf8 = "\x25"; return true; // %
+case '6': outUtf8 = "\xE2\x80\xA6\xE2\x80\xA6"; return true; // ……
+case '7': outUtf8 = "\x26"; return true; // &
+case '8': outUtf8 = "\x2A"; return true; // *
+case '9': outUtf8 = "\xEF\xBC\x88"; return true; // （
+case '0': outUtf8 = "\xEF\xBC\x89"; return true; // ）
+}
+}
 for (const auto& m: kMap) {
-if (m.vk == vkey) { outUtf8 = m.zh; return true;}
+if (m.vk == vkey) { outUtf8 = (shiftDown_ && m.zhShift) ? m.zhShift : m.zh; return true;}
 }
 return false;
 }

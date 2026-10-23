@@ -81,11 +81,14 @@ Section "Uninstall"
   ${DisableX64FSRedirection}
   ExecWait '"$SYSDIR\regsvr32.exe" /s /u "$INSTDIR\qiangyin_ime.dll"'
   ${EnableX64FSRedirection}
-  Delete "$INSTDIR\qiangyin_ime.dll"
-  Delete "$INSTDIR\qiangyin.dll"
+  ; DLL 可能被运行中的程序占用：/REBOOTOK 能删就删，删不掉则排到重启后删除，不报错
+  Delete /REBOOTOK "$INSTDIR\qiangyin_ime.dll"
+  Delete /REBOOTOK "$INSTDIR\qiangyin.dll"
+  Delete /REBOOTOK "$INSTDIR\qiangyin_ime.dll.old"
+  Delete /REBOOTOK "$INSTDIR\qiangyin.dll.old"
   Delete "$INSTDIR\mb.txt"
   Delete "$INSTDIR\usercode.txt"
   Delete "$INSTDIR\Uninstall.exe"
-  RMDir "$INSTDIR"
+  RMDir /REBOOTOK "$INSTDIR"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\QiangYin"
 SectionEnd
