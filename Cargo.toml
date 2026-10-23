@@ -1,0 +1,13 @@
+[package]
+name = "ime-engine"
+version = "0.1.0"
+edition = "2021"
+description = "超强音形输入法查词引擎原型：trie 索引 + 前缀查询（纯 Rust，无外部依赖）"
+
+[lib]
+name = "ime_engine"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ime-demo"
+path = "src/main.rs"
