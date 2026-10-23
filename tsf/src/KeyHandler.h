@@ -1,0 +1,67 @@
+#pragma once
+// 按键状态机：纯逻辑，不依赖 TSF，可单独单元测试。
+//
+// 行为（v0.1，对标超强音形）：
+// - 中文模式：a-z 进入组字；Backspace 回退组字缓冲（*关键修复*：组字中
+//   Backspace 永远被输入法吃掉，绝不下发给程序）；Space/Enter 上屏首选；
+//   Esc 取消组字；1-9 选重；Shift 点按切换中/英文；标点自动转全角。
+// - 英文模式：只处理 Shift 切换，其余按键全部放行。
+// - 任何带 Ctrl/Alt 的组合键一律放行（不抢快捷键）。
+#include <windows.h>
+#include <string>
+#include <vector>
+#include "Candidate.h"
+
+namespace qy {
+
+// TextService 实现此接口，把组字/上屏等动作落到 TSF。
+class IKeyHandlerHost {
+public:
+    virtual ~IKeyHandlerHost() = default;
+    virtual void OnCompositionStarted() = 0;
+    virtual void OnCompositionUpdated(const std::string& buffer) = 0; // buffer 变化
+    virtual void OnCommitText(const std::string& textUtf8) = 0;       // 上屏
+    virtual void OnCancelComposition() = 0;
+    virtual void OnModeChanged(bool chinese) = 0;
+};
+
+class KeyHandler {
+public:
+    explicit KeyHandler(IKeyHandlerHost* host);
+
+    // OnTestKeyDown 用：只判断吃不吃，不改变状态。必须与 HandleKeyDown 的
+    // 吃/放行决策一致（否则 TSF 会行为异常）。
+    bool WouldEatKey(UINT vkey, LPARAM lParam) const;
+    // OnKeyDown 用：执行动作，返回是否吃掉。
+    bool HandleKeyDown(UINT vkey, LPARAM lParam);
+    // OnKeyUp 用：主要用于 Shift 点按检测。
+    bool HandleKeyUp(UINT vkey, LPARAM lParam);
+
+    void Reset(); // 焦点切换/强制重置：清空组字缓冲等临时状态
+    bool chinese_mode() const { return chinese_; }
+    const std::string& buffer() const { return buffer_; }
+    bool composing() const { return !buffer_.empty(); }
+
+    void SetEngineQuery(std::vector<Candidate> (*query)(const std::string&, void*),
+                        void* ctx) {
+        query_ = query; queryCtx_ = ctx;
+    }
+
+private:
+    bool HasCtrlAlt() const;
+    bool IsPunctKey(UINT vkey, std::string& outUtf8) const;
+    std::vector<Candidate> QueryCandidates() const;
+    void CommitTopCandidate(); // 上屏首选（无候选则上屏 buffer 原样）
+    void ToggleMode();
+
+    IKeyHandlerHost* host_;
+    bool chinese_ = true;      // 默认中文模式
+    std::string buffer_;       // 组字缓冲：a-z
+    bool shiftDown_ = false;   // Shift 是否按下（用于点按检测）
+    bool shiftUsed_ = false;   // Shift 按下期间有无其他按键
+
+    std::vector<Candidate> (*query_)(const std::string&, void*) = nullptr;
+    void* queryCtx_ = nullptr;
+};
+
+} // namespace qy

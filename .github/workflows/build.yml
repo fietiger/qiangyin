@@ -35,3 +35,19 @@ jobs:
         with:
           name: qiangyin-linux-x64
           path: target/release/libqiangyin.so
+
+  tsf:
+    # 强音输入法 TSF 外壳（C++）：MSVC 编译出 qiangyin_ime.dll
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: configure
+        run: cmake -S tsf -B build-tsf -A x64
+      - name: build
+        run: cmake --build build-tsf --config Release
+      - name: upload ime dll
+        uses: actions/upload-artifact@v4
+        with:
+          name: qiangyin-ime-windows-x64
+          path: build-tsf/Release/qiangyin_ime.dll
