@@ -140,6 +140,8 @@ static HRESULT RegisterServer() {
     if (FAILED(hr)) return hr;
 
     // 注册分类：让任务栏识别为键盘输入法（安装时注册，Activate 里也会再注册一次）
+    // GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT：系统托盘集成（Chewing 等开源输入法都注册这个，
+    // 仅靠 RegisterProfile 的 TF_IPP_CAPS_SYSTRAYSUPPORT flag 不够）
     ITfCategoryMgr* pCat = nullptr;
     if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
                                    IID_ITfCategoryMgr,
@@ -149,6 +151,15 @@ static HRESULT RegisterServer() {
                                CLSID_QiangYinTextService);
         pCat->RegisterCategory(CLSID_QiangYinTextService,
                                GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
+                               CLSID_QiangYinTextService);
+        pCat->RegisterCategory(CLSID_QiangYinTextService,
+                               GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
+                               CLSID_QiangYinTextService);
+        pCat->RegisterCategory(CLSID_QiangYinTextService,
+                               GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
+                               CLSID_QiangYinTextService);
+        pCat->RegisterCategory(CLSID_QiangYinTextService,
+                               GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
                                CLSID_QiangYinTextService);
         pCat->Release();
     }
@@ -176,6 +187,15 @@ static HRESULT UnregisterServer() {
                                  CLSID_QiangYinTextService);
         pCat->UnregisterCategory(CLSID_QiangYinTextService,
                                  GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
+                                 CLSID_QiangYinTextService);
+        pCat->UnregisterCategory(CLSID_QiangYinTextService,
+                                 GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
+                                 CLSID_QiangYinTextService);
+        pCat->UnregisterCategory(CLSID_QiangYinTextService,
+                                 GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
+                                 CLSID_QiangYinTextService);
+        pCat->UnregisterCategory(CLSID_QiangYinTextService,
+                                 GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
                                  CLSID_QiangYinTextService);
         pCat->Release();
     }

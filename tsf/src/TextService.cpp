@@ -269,6 +269,15 @@ STDMETHODIMP CQiangYinTextService::Activate(ITfThreadMgr* ptim, TfClientId tid) 
         pCat->RegisterCategory(CLSID_QiangYinTextService,
                                GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
                                CLSID_QiangYinTextService);
+        pCat->RegisterCategory(CLSID_QiangYinTextService,
+                               GUID_TFCAT_TIPCAP_SYSTRAYSUPPORT,
+                               CLSID_QiangYinTextService);
+        pCat->RegisterCategory(CLSID_QiangYinTextService,
+                               GUID_TFCAT_TIPCAP_UIELEMENTENABLED,
+                               CLSID_QiangYinTextService);
+        pCat->RegisterCategory(CLSID_QiangYinTextService,
+                               GUID_TFCAT_TIPCAP_IMMERSIVESUPPORT,
+                               CLSID_QiangYinTextService);
         pCat->RegisterGUID(GUID_QiangYinDisplayAttr, &_gaDisplayAttr);
         pCat->Release();
     }
