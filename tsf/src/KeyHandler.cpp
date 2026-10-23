@@ -73,6 +73,7 @@ if (vkey == VK_BACK) return composing(); // ★ 核心修复：组字中退格�
 if (vkey == VK_SPACE || vkey == VK_RETURN || vkey == VK_ESCAPE)
 return composing();
 if (vkey >= '1' && vkey <= '9') return composing();
+if (vkey == '0' || vkey == VK_OEM_1 || vkey == VK_OEM_7) return composing(); // 0/;/'
 std::string dummy;
 if (IsPunctKey(vkey, dummy)) return true;
 return false;
@@ -91,6 +92,16 @@ if (!chinese_) return false;
 if (vkey >= 'A' && vkey <= 'Z') {
 bool start = buffer_.empty();
 buffer_ += static_cast<char>(vkey - 'A' + 'a');
+// 四键上屏：满 4 码且唯一候选时直接上屏（超强音形行为），不用等空格
+if (buffer_.size() >= 4) {
+auto cands = QueryCandidates();
+// 原版配置：候选唯一自动上屏码长=4，自动上屏仅限全码=是
+if (cands.size() == 1 && cands[0].code == buffer_) {
+host_->OnCommitText(cands[0].text);
+buffer_.clear();
+return true;
+}
+}
 if (start) host_->OnCompositionStarted();
 else host_->OnCompositionUpdated(buffer_);
 return true;
@@ -106,9 +117,17 @@ else host_->OnCompositionUpdated(buffer_);
 return true;
 }
 
-if (vkey == VK_SPACE || vkey == VK_RETURN) {
+if (vkey == VK_SPACE) {
 if (!composing()) return false;
 CommitTopCandidate();
+return true;
+}
+
+if (vkey == VK_RETURN) {
+// 原版配置：键Enter=清除输入（不是上屏！）
+if (!composing()) return false;
+buffer_.clear();
+host_->OnCancelComposition();
 return true;
 }
 
@@ -119,15 +138,19 @@ host_->OnCancelComposition();
 return true;
 }
 
-if (vkey >= '1' && vkey <= '9') {
+if ((vkey >= '1' && vkey <= '9') || vkey == '0' || vkey == VK_OEM_1 || vkey == VK_OEM_7) {
 if (!composing()) return false;
 auto cands = QueryCandidates();
-size_t idx = static_cast<size_t>(vkey - '1');
+size_t idx = 0;
+if (vkey >= '1' && vkey <= '9') idx = static_cast<size_t>(vkey - '1');
+else if (vkey == '0') idx = 9;                    // 0=第10候选
+else if (vkey == VK_OEM_1) idx = 1;               // ;=第2候选
+else if (vkey == VK_OEM_7) idx = 2;               // '=第3候选
 if (idx < cands.size()) {
 host_->OnCommitText(cands[idx].text);
 buffer_.clear();
 }
-// 序号越界也吃掉：保持组字状态不乱（行为开关，见 README）
+// 序号越界也吃掉：保持组字状态不乱
 return true;
 }
 

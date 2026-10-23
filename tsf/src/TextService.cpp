@@ -195,7 +195,7 @@ std::vector<qy::Candidate> CQiangYinTextService::EngineQueryTrampoline(
             OutputDebugStringW(L"[qiangyin] engine load failed\n");
     }
     if (!self->_engine.IsLoaded()) { QYLOG("query: engine not loaded"); return out; }
-    for (auto& c : self->_engine.Query(prefix, 9))
+    for (auto& c : self->_engine.Query(prefix, 10))
         out.push_back({c.text, c.code});
     { wchar_t b[128]; wsprintfW(b, L"query prefix=%S -> %u candidates", prefix.c_str(), (unsigned)out.size()); qy::log::Write(b); }
     return out;
@@ -619,9 +619,17 @@ void CQiangYinTextService::UpdateCandidateWindow(TfEditCookie ec, ITfRange* rang
         pView->Release();
     }
     if (!placed) {
+        // GetCaretPos 返回客户区坐标，WS_POPUP 需要屏幕坐标，必须转换
         POINT pt = {};
         GetCaretPos(&pt);
+        HWND hwndFocus = GetFocus();
+        if (hwndFocus) ClientToScreen(hwndFocus, &pt);
         x = pt.x; y = pt.y + 20;
+        // 兜底：如果还是拿不到有效坐标，放屏幕中央偏下
+        if (x <= 0 && y <= 0) {
+            x = GetSystemMetrics(SM_CXSCREEN) / 2 - 100;
+            y = GetSystemMetrics(SM_CYSCREEN) / 2 + 100;
+        }
     }
     if (_candWnd.IsVisible()) {
         _candWnd.Update(texts);
@@ -643,7 +651,7 @@ std::vector<std::wstring> CQiangYinTextService::CurrentCandidateTexts() {
             OutputDebugStringW(L"[qiangyin] engine load failed\n");
     }
     if (!_engine.IsLoaded()) return out;
-    for (auto& c : _engine.Query(buf, 9))
+    for (auto& c : _engine.Query(buf, 10))
         out.push_back(Utf8ToWide(c.text));
     return out;
 }
