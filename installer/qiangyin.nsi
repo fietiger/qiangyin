@@ -31,7 +31,28 @@ Section "强音输入法" SecMain
   ${EnableX64FSRedirection}
 
   File "..\build-installer\staging\qiangyin_ime.dll"
+  IfErrors 0 qy_ime_ok
+    ; DLL 被运行中的进程占用：重命名旧文件再写入，旧文件重启后删除
+    DetailPrint "qiangyin_ime.dll 被占用，尝试重命名替换..."
+    Delete "$INSTDIR\qiangyin_ime.dll.old"
+    Rename "$INSTDIR\qiangyin_ime.dll" "$INSTDIR\qiangyin_ime.dll.old"
+    File "..\build-installer\staging\qiangyin_ime.dll"
+    IfErrors 0 qy_ime_ok
+      MessageBox MB_ICONSTOP "无法替换 qiangyin_ime.dll，请关闭所有程序后重试。"
+      Abort
+    Delete /REBOOTOK "$INSTDIR\qiangyin_ime.dll.old"
+  qy_ime_ok:
   File "..\build-installer\staging\qiangyin.dll"
+  IfErrors 0 qy_eng_ok
+    DetailPrint "qiangyin.dll 被占用，尝试重命名替换..."
+    Delete "$INSTDIR\qiangyin.dll.old"
+    Rename "$INSTDIR\qiangyin.dll" "$INSTDIR\qiangyin.dll.old"
+    File "..\build-installer\staging\qiangyin.dll"
+    IfErrors 0 qy_eng_ok
+      MessageBox MB_ICONSTOP "无法替换 qiangyin.dll，请关闭所有程序后重试。"
+      Abort
+    Delete /REBOOTOK "$INSTDIR\qiangyin.dll.old"
+  qy_eng_ok:
   File "..\build-installer\staging\mb.txt"
   File "..\build-installer\staging\usercode.txt"
 
