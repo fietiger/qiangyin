@@ -527,7 +527,8 @@ STDMETHODIMP CQiangYinTextService::OnChange(REFGUID rguid) {
     if (!_pConvCompartment) return S_OK;
     VARIANT v;
     VariantInit(&v);
-    if (SUCCEEDED(_pConvCompartment->GetValue(&_tfClientId, &v)) && v.vt == VT_I4) {
+    // 注意：GetValue 只取 1 个参数（VARIANT*），SetValue 才要传 tid
+    if (SUCCEEDED(_pConvCompartment->GetValue(&v)) && v.vt == VT_I4) {
         bool chinese = (v.lVal & TF_CONVERSIONMODE_NATIVE) != 0;
         // SetChineseMode 内部会处理组字中先上屏；OnModeChanged 回写 compartment 是等幂的
         _keyHandler.SetChineseMode(chinese);
