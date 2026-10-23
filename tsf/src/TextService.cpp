@@ -549,7 +549,16 @@ HRESULT CQiangYinTextService::OnEditCommit(TfEditCookie ec, const std::wstring& 
             _pContext->SetSelection(ec, 1, &sel);
             pRange->Release();
         }
-        _pComposition->EndComposition(ec); // 会触发 OnCompositionTerminated
+        _pComposition->EndComposition(ec);
+        // 防御：OnCompositionTerminated 可能不被触发（如 sink 未正确注册），
+        // 手动清理状态，避免 _composing 卡住导致后续无法输入。
+        // OnCompositionTerminated 里的清理是幂等的，重复调用无害。
+        if (_composing) {
+            QYLOG("OnEditCommit: manual cleanup after EndComposition");
+            _composing = false;
+            if (_pComposition) { _pComposition->Release(); _pComposition = nullptr; }
+            _keyHandler.Reset();
+        }
     } else {
         // 无组字：直接在光标处插入（标点等）
         ITfRange* pRange = nullptr;
@@ -581,6 +590,12 @@ HRESULT CQiangYinTextService::OnEditCancel(TfEditCookie ec) {
             pRange->Release();
         }
         _pComposition->EndComposition(ec);
+        // 防御：同 OnEditCommit，手动清理防卡住
+        if (_composing) {
+            _composing = false;
+            if (_pComposition) { _pComposition->Release(); _pComposition = nullptr; }
+            _keyHandler.Reset();
+        }
     }
     HideCandidates();
     return S_OK;
