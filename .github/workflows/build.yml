@@ -93,7 +93,17 @@ jobs:
       - name: build installer
         shell: pwsh
         run: |
-          & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" installer/qiangyin.nsi
+          $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (!(Test-Path $nsis)) { $nsis = "$env:ProgramFiles\NSIS\makensis.exe" }
+          Write-Host "NSIS: $nsis"
+          if (!(Test-Path $nsis)) { Write-Host "::error::makensis not found"; exit 1 }
+          & $nsis installer/qiangyin.nsi 2>&1 | Tee-Object -FilePath nsis.log
+          if ($LASTEXITCODE -ne 0) {
+            foreach ($line in (Get-Content nsis.log)) {
+              if ($line -match '[Ee]rror') { Write-Host ("::error::" + $line) }
+            }
+            exit 1
+          }
           Get-ChildItem QiangYin-Setup.exe
       - name: upload installer
         uses: actions/upload-artifact@v4
