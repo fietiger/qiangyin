@@ -67,3 +67,36 @@ jobs:
         with:
           name: qiangyin-ime-windows-x64
           path: build-tsf/Release/qiangyin_ime.dll
+
+  installer:
+    # 打包 NSIS 安装包 QiangYin-Setup.exe（含引擎 DLL + TSF DLL + 码表）
+    runs-on: windows-latest
+    needs: [windows, tsf]
+    steps:
+      - uses: actions/checkout@v4
+      - name: download engine dll
+        uses: actions/download-artifact@v4
+        with:
+          name: qiangyin-windows-x64
+          path: build-installer/staging
+      - name: download ime dll
+        uses: actions/download-artifact@v4
+        with:
+          name: qiangyin-ime-windows-x64
+          path: build-installer/staging
+      - name: stage data files
+        shell: pwsh
+        run: |
+          Copy-Item data/mb.txt build-installer/staging/
+          Copy-Item data/usercode.txt build-installer/staging/
+          Get-ChildItem build-installer/staging
+      - name: build installer
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" installer/qiangyin.nsi
+          Get-ChildItem QiangYin-Setup.exe
+      - name: upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: qiangyin-setup-windows-x64
+          path: QiangYin-Setup.exe
