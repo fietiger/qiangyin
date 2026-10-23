@@ -391,6 +391,7 @@ STDMETHODIMP CQiangYinTextService::OnPreservedKey(ITfContext*, REFGUID, BOOL* pf
 // ---- ITfCompositionSink ----
 STDMETHODIMP CQiangYinTextService::OnCompositionTerminated(TfEditCookie,
                                                            ITfComposition* pComposition) {
+    QYLOG("OnCompositionTerminated");
     if (pComposition == _pComposition) {
         _pComposition->Release();
         _pComposition = nullptr;
@@ -466,6 +467,7 @@ HRESULT CQiangYinTextService::RequestEditSession(DWORD flags, ITfEditSession* se
 
 // ---- edit session 实际工作 ----
 HRESULT CQiangYinTextService::OnEditStartComposition(TfEditCookie ec) {
+    { wchar_t b[128]; wsprintfW(b, L"OnEditStartComposition _composing=%d _pComp=%p", _composing ? 1 : 0, _pComposition); qy::log::Write(b); }
     if (_composing || !_pContext) return S_OK;
 
     ITfRange* pRange = nullptr;
