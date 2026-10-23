@@ -30,7 +30,11 @@ Section "强音输入法" SecMain
   File "..\build-installer\staging\usercode.txt"
 
   ; 注册 TSF 输入法（写 HKCR\CLSID + 注册 TSF profile）
-  ExecWait 'regsvr32 /s "$INSTDIR\qiangyin_ime.dll"' $0
+  ; 注意：NSIS 安装包是 32 位进程，必须关掉文件系统重定向，
+  ; 否则 regsvr32 会被重定向到 SysWOW64 的 32 位版本，加载不了 64 位 DLL
+  ${DisableX64FSRedirection}
+  ExecWait '"$SYSDIR\regsvr32.exe" /s "$INSTDIR\qiangyin_ime.dll"' $0
+  ${EnableX64FSRedirection}
   ${If} $0 != 0
     MessageBox MB_ICONSTOP "输入法注册失败（regsvr32 返回 $0）。请确认以管理员身份运行安装包。"
     Abort
@@ -46,8 +50,10 @@ Section "强音输入法" SecMain
 SectionEnd
 
 Section "Uninstall"
-  ; 反注册输入法
-  ExecWait 'regsvr32 /s /u "$INSTDIR\qiangyin_ime.dll"'
+  ; 反注册输入法（同上，用 64 位 regsvr32）
+  ${DisableX64FSRedirection}
+  ExecWait '"$SYSDIR\regsvr32.exe" /s /u "$INSTDIR\qiangyin_ime.dll"'
+  ${EnableX64FSRedirection}
   Delete "$INSTDIR\qiangyin_ime.dll"
   Delete "$INSTDIR\qiangyin.dll"
   Delete "$INSTDIR\mb.txt"
