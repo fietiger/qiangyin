@@ -318,9 +318,13 @@ STDMETHODIMP CQiangYinTextService::OnSetFocus(ITfDocumentMgr* pdimFocus,
                                               ITfDocumentMgr*) {
     if (_pContext) { _pContext->Release(); _pContext = nullptr; }
     if (pdimFocus) pdimFocus->GetTop(&_pContext);
-    // 焦点切换：丢弃组字状态（避免跨输入框串状态）
-    _keyHandler.Reset();
-    HideCandidates();
+    // 焦点切换：只有在没有活动组字时才丢弃状态。
+    // 组字中的焦点通知（如候选窗相关）不应中断输入；
+    // 真正的上下文切换会走 OnCompositionTerminated 做清理。
+    if (!_composing) {
+        _keyHandler.Reset();
+        HideCandidates();
+    }
     return S_OK;
 }
 
@@ -340,7 +344,9 @@ STDMETHODIMP CQiangYinTextService::OnPopContext(ITfContext*) {
 
 // ---- ITfKeyEventSink ----
 STDMETHODIMP CQiangYinTextService::OnSetFocus(BOOL fForeground) {
-    if (!fForeground) {
+    // 失去前台时：组字中不丢状态（由 OnCompositionTerminated 清理），
+    // 避免候选窗显示期间的焦点抖动把输入灭掉。
+    if (!fForeground && !_composing) {
         _keyHandler.Reset();
         HideCandidates();
     }
