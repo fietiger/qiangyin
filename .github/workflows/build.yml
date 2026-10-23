@@ -94,6 +94,11 @@ jobs:
         shell: pwsh
         run: |
           $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (!(Test-Path $nsis)) {
+            Write-Host "Installing NSIS via Chocolatey..."
+            choco install nsis -y --no-progress
+            $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          }
           if (!(Test-Path $nsis)) { $nsis = "$env:ProgramFiles\NSIS\makensis.exe" }
           Write-Host "NSIS: $nsis"
           if (!(Test-Path $nsis)) { Write-Host "::error::makensis not found"; exit 1 }
