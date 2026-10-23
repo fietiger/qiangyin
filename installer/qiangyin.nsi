@@ -1,4 +1,4 @@
-; 强音输入法 NSIS 安装脚本
+﻿; 强音输入法 NSIS 安装脚本
 ; 由 GitHub Actions 在 windows-latest 上打包，产物 QiangYin-Setup.exe
 ; 需要文件（由 workflow 准备到 build-installer/staging/）：
 ;   qiangyin_ime.dll  qiangyin.dll  mb.txt  usercode.txt
