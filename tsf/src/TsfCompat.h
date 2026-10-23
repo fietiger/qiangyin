@@ -30,11 +30,8 @@ DEFINE_GUID(IID_IEnumTfDisplayAttributeInfo,
 #define TF_INVALID_GUIDATOM ((TfGuidAtom)-1)
 #endif
 
-// 转换模式 compartment 相关（任务栏中/英徽标）：mingw 的 msctf.h 可能缺，兜底
-#ifndef GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION
-DEFINE_GUID(GUID_COMPARTMENT_KEYBOARD_INPUTMODE_CONVERSION,
-    0xccf05a62, 0x8b7d, 0x11d2, 0xb4, 0xb9, 0x0, 0xc0, 0x4f, 0x68, 0xe6, 0xdd);
-#endif
+// 转换模式 compartment 相关（任务栏中/英徽标）：标准 TSF 定义，msctf.h 里有
+// TF_CONVERSIONMODE_* 是宏，msctf.h 一定有；这里只防万一
 #ifndef TF_CONVERSIONMODE_ALPHANUMERIC
 #define TF_CONVERSIONMODE_ALPHANUMERIC 0x0000
 #endif
