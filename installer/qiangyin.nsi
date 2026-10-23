@@ -7,7 +7,7 @@
 !include "x64.nsh"
 
 Name "强音输入法"
-OutFile "QiangYin-Setup.exe"
+OutFile "..\QiangYin-Setup.exe"
 InstallDir "$PROGRAMFILES64\QiangYin"
 RequestExecutionLevel admin
 Unicode true
@@ -24,10 +24,10 @@ SetCompressor /SOLID lzma
 
 Section "强音输入法" SecMain
   SetOutPath "$INSTDIR"
-  File "build-installer\staging\qiangyin_ime.dll"
-  File "build-installer\staging\qiangyin.dll"
-  File "build-installer\staging\mb.txt"
-  File "build-installer\staging\usercode.txt"
+  File "..\build-installer\staging\qiangyin_ime.dll"
+  File "..\build-installer\staging\qiangyin.dll"
+  File "..\build-installer\staging\mb.txt"
+  File "..\build-installer\staging\usercode.txt"
 
   ; 注册 TSF 输入法（写 HKCR\CLSID + 注册 TSF profile）
   ExecWait 'regsvr32 /s "$INSTDIR\qiangyin_ime.dll"' $0
