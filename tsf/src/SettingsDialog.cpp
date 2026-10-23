@@ -20,9 +20,14 @@ INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         CheckRadioButton(h, IDC_ENTER_CLEARS, IDC_ENTER_COMMIT,
                          s->enterClears ? IDC_ENTER_CLEARS : IDC_ENTER_COMMIT);
         HWND cb = GetDlgItem(h, IDC_CAND_COMBO);
-        ComboBox_AddString(cb, L"5");
-        ComboBox_AddString(cb, L"10");
-        ComboBox_SelectString(cb, -1, s->candidateCount == 5 ? L"5" : L"10");
+        for (int n = 5; n <= 10; ++n) {
+            wchar_t s[4] = {0};
+            _itow(n, s, 10);
+            ComboBox_AddString(cb, s);
+        }
+        wchar_t cur[4] = {0};
+        _itow(s->candidateCount, cur, 10);
+        ComboBox_SelectString(cb, -1, cur);
         return TRUE; // 焦点给默认按钮
     }
     case WM_COMMAND:
@@ -39,7 +44,10 @@ INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             s->enterClears   = IsDlgButtonChecked(h, IDC_ENTER_CLEARS) == BST_CHECKED;
             wchar_t buf[8] = {0};
             GetDlgItemTextW(h, IDC_CAND_COMBO, buf, 8);
-            s->candidateCount = (wcscmp(buf, L"5") == 0) ? 5 : 10;
+            int n = _wtoi(buf);
+            if (n < 5) n = 5;
+            if (n > 10) n = 10;
+            s->candidateCount = n;
             s->Save();
             EndDialog(h, IDOK);
             return TRUE;

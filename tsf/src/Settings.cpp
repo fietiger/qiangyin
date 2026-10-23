@@ -19,7 +19,8 @@ void Settings::Load() {
     alwaysChinese  = ReadDword(L"AlwaysChinese", 0) != 0;
     chinesePunct   = ReadDword(L"ChinesePunct", 1) != 0;
     fullShape      = ReadDword(L"FullShape", 0) != 0;
-    candidateCount = (ReadDword(L"CandidateCount", 10) == 5) ? 5 : 10;
+    DWORD c = ReadDword(L"CandidateCount", 10);
+    candidateCount = (c >= 5 && c <= 10) ? (int)c : 10; // 选字键最多 0=第10，候选上限 10
 }
 
 bool Settings::Save() const {

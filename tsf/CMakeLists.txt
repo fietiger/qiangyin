@@ -36,6 +36,11 @@ set_target_properties(qiangyin_ime PROPERTIES
 
 target_link_libraries(qiangyin_ime PRIVATE ole32 oleaut32 uuid gdi32 advapi32)
 
+# 整个代码库都用显式 W 后缀 API；定义 UNICODE 让宏（SNDMSG/DefWindowProc 等）
+# 也走 W 版本。不定义的话 ComboBox_AddString 会展开成 SendMessageA，
+# 把 L"10" 按 ANSI 读到第一个 0 字节截断成 "1"（设置对话框实测的坑）。
+target_compile_definitions(qiangyin_ime PRIVATE UNICODE _UNICODE)
+
 # MSVC：关闭不必要的警告，UTF-8 源码
 if(MSVC)
     target_compile_options(qiangyin_ime PRIVATE /W3 /utf-8)
