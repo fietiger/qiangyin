@@ -17,6 +17,7 @@ set(SRCS
     src/CandidateWindow.cpp
     src/dllmain.cpp
     src/qiangyin_ime.def
+    qiangyin.rc
 )
 
 add_library(qiangyin_ime SHARED ${SRCS})

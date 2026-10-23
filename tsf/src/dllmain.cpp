@@ -7,6 +7,12 @@
 #include "Guids.h"
 #include "QyLog.h"
 
+// TF_IPP_CAPS_SYSTRAYSUPPORT (Win8+)：允许输入法显示在任务栏系统托盘
+// 正常 msctf.h 里有，这里兜底以防旧 SDK 缺定义
+#ifndef TF_IPP_CAPS_SYSTRAYSUPPORT
+#define TF_IPP_CAPS_SYSTRAYSUPPORT 0x0040
+#endif
+
 static LONG g_dllRefCount = 0;
 static HMODULE g_hModule = nullptr;
 
@@ -128,7 +134,7 @@ static HRESULT RegisterServer() {
             nullptr,                  // hklSubstitute
             0,                        // dwPreferredLayout
             TRUE,                     // 默认启用
-            0);                       // dwFlags
+            TF_IPP_CAPS_SYSTRAYSUPPORT); // Win8+：允许显示在任务栏系统托盘
         pMgr->Release();
     }
     if (FAILED(hr)) return hr;

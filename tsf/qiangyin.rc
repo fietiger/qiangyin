@@ -1,0 +1,4 @@
+// 强音输入法图标资源
+#include <windows.h>
+
+1 ICON "qiangyin.ico"
