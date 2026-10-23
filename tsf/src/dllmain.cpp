@@ -131,6 +131,21 @@ static HRESULT RegisterServer() {
             0);                       // dwFlags
         pMgr->Release();
     }
+    if (FAILED(hr)) return hr;
+
+    // 注册分类：让任务栏识别为键盘输入法（安装时注册，Activate 里也会再注册一次）
+    ITfCategoryMgr* pCat = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
+                                   IID_ITfCategoryMgr,
+                                   reinterpret_cast<void**>(&pCat)))) {
+        pCat->RegisterCategory(CLSID_QiangYinTextService,
+                               GUID_TFCAT_TIP_KEYBOARD,
+                               CLSID_QiangYinTextService);
+        pCat->RegisterCategory(CLSID_QiangYinTextService,
+                               GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
+                               CLSID_QiangYinTextService);
+        pCat->Release();
+    }
     return hr;
 }
 
@@ -144,6 +159,19 @@ static HRESULT UnregisterServer() {
                                 MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED),
                                 GUID_QiangYinProfile, 0);
         pMgr->Release();
+    }
+    // 注销分类
+    ITfCategoryMgr* pCat = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
+                                   IID_ITfCategoryMgr,
+                                   reinterpret_cast<void**>(&pCat)))) {
+        pCat->UnregisterCategory(CLSID_QiangYinTextService,
+                                 GUID_TFCAT_TIP_KEYBOARD,
+                                 CLSID_QiangYinTextService);
+        pCat->UnregisterCategory(CLSID_QiangYinTextService,
+                                 GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
+                                 CLSID_QiangYinTextService);
+        pCat->Release();
     }
     wchar_t clsidStr[64] = {0};
     StringFromGUID2(CLSID_QiangYinTextService, clsidStr, 64);

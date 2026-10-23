@@ -257,11 +257,15 @@ STDMETHODIMP CQiangYinTextService::Activate(ITfThreadMgr* ptim, TfClientId tid) 
         pKeystrokeMgr->Release();
     }
 
-    // 注册为显示属性提供者（组字下划线），并取显示属性 GUID 的 atom
+    // 注册分类：键盘输入法 + 显示属性提供者（组字下划线），并取显示属性 GUID 的 atom
+    // GUID_TFCAT_TIP_KEYBOARD 让任务栏识别这是一个键盘输入法，否则任务栏不显示
     ITfCategoryMgr* pCat = nullptr;
     if (SUCCEEDED(CoCreateInstance(CLSID_TF_CategoryMgr, nullptr, CLSCTX_INPROC_SERVER,
                                    IID_ITfCategoryMgr,
                                    reinterpret_cast<void**>(&pCat)))) {
+        pCat->RegisterCategory(CLSID_QiangYinTextService,
+                               GUID_TFCAT_TIP_KEYBOARD,
+                               CLSID_QiangYinTextService);
         pCat->RegisterCategory(CLSID_QiangYinTextService,
                                GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER,
                                CLSID_QiangYinTextService);
