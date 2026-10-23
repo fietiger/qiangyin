@@ -1,5 +1,6 @@
 // Rust 引擎动态加载实现
 #include "Engine.h"
+#include "QyLog.h"
 
 namespace qy {
 
@@ -52,9 +53,13 @@ bool Engine::LoadFunctions() {
 
 bool Engine::Load() {
     if (dll_) return true;
+    QYLOG("Engine::Load begin");
     std::wstring dllPath = FindFile(L"qiangyin.dll");
-    dll_ = LoadLibraryW(dllPath.empty() ? L"qiangyin.dll" : dllPath.c_str());
-    if (!dll_ || !LoadFunctions()) { Unload(); return false; }
+    if (dllPath.empty()) { QYLOG("Engine::Load qiangyin.dll not found"); return false; }
+    { wchar_t b[512]; wsprintfW(b, L"Engine::Load dll=%s", dllPath.c_str()); qy::log::Write(b); }
+    dll_ = LoadLibraryW(dllPath.c_str());
+    if (!dll_) { QYLOG("Engine::Load LoadLibrary failed"); return false; }
+    if (!LoadFunctions()) { QYLOG("Engine::Load GetProcAddress failed"); Unload(); return false; }
 
     engine_ = pNew_();
     if (!engine_) { Unload(); return false; }
@@ -62,7 +67,8 @@ bool Engine::Load() {
     // 码表：系统表必须，usercode 可选
     std::wstring mb = FindFile(L"mb.txt");
     std::wstring user = FindFile(L"usercode.txt");
-    if (mb.empty()) { Unload(); return false; }
+    if (mb.empty()) { QYLOG("Engine::Load mb.txt not found"); Unload(); return false; }
+    { wchar_t b[512]; wsprintfW(b, L"Engine::Load mb=%s", mb.c_str()); qy::log::Write(b); }
 
     // 路径用 UTF-8 传给 Rust（qy_load 要求 UTF-8）
     auto toUtf8 = [](const std::wstring& w) -> std::string {
@@ -82,7 +88,8 @@ bool Engine::Load() {
         userUtf8 = toUtf8(user);
         paths.push_back(userUtf8.c_str());
     }
-    if (pLoad_(engine_, paths.data(), paths.size()) < 0) { Unload(); return false; }
+    if (pLoad_(engine_, paths.data(), paths.size()) < 0) { QYLOG("Engine::Load qy_load failed"); Unload(); return false; }
+    { wchar_t b[128]; wsprintfW(b, L"Engine::Load OK count=%llu", (unsigned long long)pCount_(engine_)); qy::log::Write(b); }
     return true;
 }
 

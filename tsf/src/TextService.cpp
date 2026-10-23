@@ -194,9 +194,10 @@ std::vector<qy::Candidate> CQiangYinTextService::EngineQueryTrampoline(
         if (!self->_engine.Load())
             OutputDebugStringW(L"[qiangyin] engine load failed\n");
     }
-    if (!self->_engine.IsLoaded()) return out;
+    if (!self->_engine.IsLoaded()) { QYLOG("query: engine not loaded"); return out; }
     for (auto& c : self->_engine.Query(prefix, 9))
         out.push_back({c.text, c.code});
+    { wchar_t b[128]; wsprintfW(b, L"query prefix=%S -> %zu candidates", prefix.c_str(), out.size()); qy::log::Write(b); }
     return out;
 }
 
