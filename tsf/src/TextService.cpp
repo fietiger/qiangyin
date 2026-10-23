@@ -7,6 +7,7 @@
 #include "Guids.h"
 #include "QyLog.h"
 #include "Utf.h"
+#include "SettingsDialog.h"
 #include <assert.h>
 
 namespace qy {
@@ -195,7 +196,8 @@ std::vector<qy::Candidate> CQiangYinTextService::EngineQueryTrampoline(
             OutputDebugStringW(L"[qiangyin] engine load failed\n");
     }
     if (!self->_engine.IsLoaded()) { QYLOG("query: engine not loaded"); return out; }
-    for (auto& c : self->_engine.Query(prefix, 10))
+    size_t limit = (size_t)self->settings_.candidateCount;
+    for (auto& c : self->_engine.Query(prefix, limit))
         out.push_back({c.text, c.code});
     { wchar_t b[128]; wsprintfW(b, L"query prefix=%S -> %u candidates", prefix.c_str(), (unsigned)out.size()); qy::log::Write(b); }
     return out;
@@ -241,6 +243,11 @@ STDMETHODIMP CQiangYinTextService::Activate(ITfThreadMgr* ptim, TfClientId tid) 
     _pThreadMgr = ptim;
     _pThreadMgr->AddRef();
     _tfClientId = tid;
+
+    // 用户设置：注入 KeyHandler（指针，改设置原地生效）；默认中文模式在此应用
+    settings_.Load();
+    _keyHandler.SetSettings(&settings_);
+    if (settings_.alwaysChinese) _keyHandler.set_chinese_mode(true);
 
     ITfSource* pSource = nullptr;
     if (SUCCEEDED(_pThreadMgr->QueryInterface(IID_ITfSource,
@@ -522,6 +529,17 @@ void CQiangYinTextService::OnLangBarToggleMode() {
     _keyHandler.SetChineseMode(!_keyHandler.chinese_mode());
 }
 
+// 任务栏图标右键菜单 → 设置对话框（模态，运行在前台应用进程里）
+void CQiangYinTextService::OnLangBarOpenSettings() {
+    Settings s = settings_;
+    if (ShowSettingsDialog(GetFocus(), s)) {
+        settings_ = s; // KeyHandler 持有的是本成员的指针，原地生效
+        if (settings_.alwaysChinese && !_keyHandler.chinese_mode())
+            _keyHandler.SetChineseMode(true);
+        QYLOG("settings saved");
+    }
+}
+
 // 添加任务栏中/英指示项：item GUID 必须是 GUID_LBI_INPUTMODE，
 // 否则系统只当普通语言栏按钮，不会显示在任务栏输入指示器里。
 void CQiangYinTextService::InitLangBar() {
@@ -786,10 +804,10 @@ std::vector<CandidateItem> CQiangYinTextService::CurrentCandidates() {
             OutputDebugStringW(L"[qiangyin] engine load failed\n");
     }
     if (!_engine.IsLoaded()) return out;
-    for (auto& c : _engine.Query(buf, 10)) {
+    for (auto& c : _engine.Query(buf, (size_t)settings_.candidateCount)) {
         CandidateItem it;
         it.text = Utf8ToWide(c.text);
-        if (c.code.size() > buf.size())
+        if (settings_.showHint && c.code.size() > buf.size())
             it.hint = Utf8ToWide(c.code.substr(buf.size()));
         out.push_back(std::move(it));
     }

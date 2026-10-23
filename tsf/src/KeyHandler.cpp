@@ -97,9 +97,9 @@ if (vkey == VK_SPACE || vkey == VK_RETURN || vkey == VK_ESCAPE)
 return composing();
 if (vkey >= '1' && vkey <= '9') return composing();
 if (vkey == '0' || vkey == VK_OEM_1 || vkey == VK_OEM_7) return composing(); // 0/;/'
-std::string dummy;
-if (IsPunctKey(vkey, dummy)) return true;
-return false;
+	std::string dummy;
+	if (ChinesePunct() && IsPunctKey(vkey, dummy)) return true;
+	return false;
 }
 
 bool KeyHandler::HandleKeyDown(UINT vkey, LPARAM lParam) {
@@ -112,11 +112,11 @@ if (HasCtrlAlt()) return false;
 
 if (!chinese_) return false;
 
-if (vkey >= 'A' && vkey <= 'Z') {
-bool start = buffer_.empty();
-buffer_ += static_cast<char>(vkey - 'A' + 'a');
-// 四键上屏：满 4 码且唯一候选时直接上屏（超强音形行为），不用等空格
-if (buffer_.size() >= 4) {
+	if (vkey >= 'A' && vkey <= 'Z') {
+	bool start = buffer_.empty();
+	buffer_ += static_cast<char>(vkey - 'A' + 'a');
+	// 四键上屏：满 4 码且唯一候选时直接上屏（超强音形行为），不用等空格
+	if (AutoCommitFull() && buffer_.size() >= 4) {
 auto cands = QueryCandidates();
 // 原版配置：候选唯一自动上屏码长=4，自动上屏仅限全码=是
 if (cands.size() == 1 && cands[0].code == buffer_) {
@@ -147,13 +147,17 @@ CommitTopCandidate();
 return true;
 }
 
-if (vkey == VK_RETURN) {
-// 原版配置：键Enter=清除输入（不是上屏！）
-if (!composing()) return false;
-buffer_.clear();
-host_->OnCancelComposition();
-return true;
-}
+	if (vkey == VK_RETURN) {
+	if (!composing()) return false;
+	// 可配置：Enter=清除输入（默认，原版配置）或上屏首选
+	if (!EnterClears()) {
+		CommitTopCandidate();
+	} else {
+		buffer_.clear();
+		host_->OnCancelComposition();
+	}
+	return true;
+	}
 
 if (vkey == VK_ESCAPE) {
 if (!composing()) return false;
@@ -178,12 +182,12 @@ buffer_.clear();
 return true;
 }
 
-std::string punct;
-if (IsPunctKey(vkey, punct)) {
-if (composing()) CommitTopCandidate();
-host_->OnCommitText(punct);
-return true;
-}
+	std::string punct;
+	if (ChinesePunct() && IsPunctKey(vkey, punct)) {
+	if (composing()) CommitTopCandidate();
+	host_->OnCommitText(punct);
+	return true;
+	}
 
 return false;
 }

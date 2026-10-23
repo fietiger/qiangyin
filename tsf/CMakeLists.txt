@@ -16,6 +16,8 @@ set(SRCS
     src/TextService.cpp
     src/CandidateWindow.cpp
     src/LangBar.cpp
+    src/Settings.cpp
+    src/SettingsDialog.cpp
     src/dllmain.cpp
     src/qiangyin_ime.def
     qiangyin.rc
@@ -32,7 +34,7 @@ set_target_properties(qiangyin_ime PROPERTIES
     SUFFIX ".dll"
 )
 
-target_link_libraries(qiangyin_ime PRIVATE ole32 oleaut32 uuid gdi32)
+target_link_libraries(qiangyin_ime PRIVATE ole32 oleaut32 uuid gdi32 advapi32)
 
 # MSVC：关闭不必要的警告，UTF-8 源码
 if(MSVC)

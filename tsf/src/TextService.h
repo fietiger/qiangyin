@@ -11,6 +11,7 @@
 #include "Engine.h"
 #include "CandidateWindow.h"
 #include "LangBar.h"
+#include "Settings.h"
 
 namespace qy {
 
@@ -68,8 +69,9 @@ public:
     void OnCancelComposition() override;
     void OnModeChanged(bool chinese) override;
 
-    // ILangBarHost（任务栏中/英图标左键点击）
+    // ILangBarHost（任务栏中/英图标交互）
     void OnLangBarToggleMode() override;
+    void OnLangBarOpenSettings() override;
 
     // edit session 回调（已有 ec）
     HRESULT OnEditStartComposition(TfEditCookie ec);
@@ -104,6 +106,7 @@ private:
     void SetConversionModeCompartment(bool chinese);
     // 任务栏中/英指示（GUID_LBI_INPUTMODE 语言栏项，图标真正显示靠它）
     CQiangYinLangBarItem* _pLangBarItem = nullptr;
+    Settings settings_; // 用户设置（Activate 时加载，KeyHandler 持有指针）
 TfGuidAtom _gaDisplayAttr = TF_INVALID_GUIDATOM;
 
     KeyHandler _keyHandler;

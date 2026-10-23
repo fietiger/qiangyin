@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 #include "Candidate.h"
+#include "Settings.h"
 
 namespace qy {
 
@@ -20,7 +21,7 @@ public:
     virtual ~IKeyHandlerHost() = default;
     virtual void OnCompositionStarted() = 0;
     virtual void OnCompositionUpdated(const std::string& buffer) = 0; // buffer 变化
-    virtual void OnCommitText(const std::string& textUtf8) = 0;       // 上屏
+    virtual void OnCommitText(const std::string& text) = 0;       // 上屏
     virtual void OnCancelComposition() = 0;
     virtual void OnModeChanged(bool chinese) = 0;
 };
@@ -28,6 +29,9 @@ public:
 class KeyHandler {
 public:
     explicit KeyHandler(IKeyHandlerHost* host);
+
+    // 注入用户设置（属主是 TextService，Activate 时设置；空指针=默认行为，供单测）
+    void SetSettings(const Settings* s) { settings_ = s; }
 
     // OnTestKeyDown 用：只判断吃不吃，不改变状态。必须与 HandleKeyDown 的
     // 吃/放行决策一致（否则 TSF 会行为异常）。
@@ -56,7 +60,13 @@ private:
     void CommitTopCandidate(); // 上屏首选（无候选则上屏 buffer 原样）
     void ToggleMode();
 
+    // 设置读取（空指针回落默认，保持可单测）
+    bool AutoCommitFull() const { return !settings_ || settings_->autoCommitFull; }
+    bool EnterClears() const { return !settings_ || settings_->enterClears; }
+    bool ChinesePunct() const { return !settings_ || settings_->chinesePunct; }
+
     IKeyHandlerHost* host_;
+    const Settings* settings_ = nullptr;
     bool chinese_ = true;      // 默认中文模式
     std::string buffer_;       // 组字缓冲：a-z
     bool shiftDown_ = false;   // Shift 是否按下（用于点按检测）

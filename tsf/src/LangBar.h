@@ -14,7 +14,8 @@ namespace qy {
 // 语言栏按钮回调宿主（非 COM，纯 C++ 接口）
 class ILangBarHost {
 public:
-    virtual void OnLangBarToggleMode() = 0; // 任务栏图标左键：切换中/英
+    virtual void OnLangBarToggleMode() = 0;          // 任务栏图标左键：切换中/英
+    virtual void OnLangBarOpenSettings() = 0;        // 任务栏图标右键菜单：设置
 protected:
     ~ILangBarHost() = default;
 };

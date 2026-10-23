@@ -130,7 +130,9 @@ STDMETHODIMP CQiangYinLangBarItem::GetInfo(TF_LANGBARITEMINFO* pInfo) {
     if (!pInfo) return E_POINTER;
     pInfo->clsidService = CLSID_QiangYinTextService;
     pInfo->guidItem = GUID_QY_LBI_INPUTMODE;
-    pInfo->dwStyle = TF_LBI_STYLE_BTN_BUTTON | TF_LBI_STYLE_SHOWNINTRAY;
+    // BTN_MENU：右键出菜单（任务栏发 OnClick(TF_LBI_CLK_RIGHT)，浮动语言栏走 InitMenu）
+    pInfo->dwStyle = TF_LBI_STYLE_BTN_BUTTON | TF_LBI_STYLE_BTN_MENU |
+                     TF_LBI_STYLE_SHOWNINTRAY;
     pInfo->ulSort = 1;
     lstrcpyW(pInfo->szDescription, L"强音 中/英状态");
     return S_OK;
@@ -154,20 +156,45 @@ STDMETHODIMP CQiangYinLangBarItem::Show(BOOL fShow) {
 
 STDMETHODIMP CQiangYinLangBarItem::GetTooltipString(BSTR* pbstrToolTip) {
     if (!pbstrToolTip) return E_POINTER;
-    *pbstrToolTip = SysAllocString(L"强音输入法：点击切换 中/英");
+    *pbstrToolTip = SysAllocString(L"强音输入法：左键切换 中/英，右键打开菜单");
     return *pbstrToolTip ? S_OK : E_OUTOFMEMORY;
 }
 
 // ---- ITfLangBarItemButton ----
-STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT, const RECT*) {
-    if (click == TF_LBI_CLK_LEFT && _host)
-        _host->OnLangBarToggleMode();
+static const UINT kMenuIdSettings = 100;
+
+STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const RECT*) {
+    if (click == TF_LBI_CLK_LEFT) {
+        if (_host) _host->OnLangBarToggleMode();
+    } else if (click == TF_LBI_CLK_RIGHT && _host) {
+        // 右键菜单：借用当前进程的焦点窗口当属主（weasel 同款做法）
+        HMENU menu = CreatePopupMenu();
+        AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"设置(&S)...");
+        HWND owner = GetFocus();
+        if (!owner) owner = GetForegroundWindow();
+        if (owner) {
+            UINT cmd = TrackPopupMenuEx(menu,
+                                        TPM_NONOTIFY | TPM_RETURNCMD | TPM_RIGHTBUTTON,
+                                        pt.x, pt.y, owner, nullptr);
+            if (cmd == kMenuIdSettings) _host->OnLangBarOpenSettings();
+        }
+        DestroyMenu(menu);
+    }
     return S_OK;
 }
 
-STDMETHODIMP CQiangYinLangBarItem::InitMenu(ITfMenu*) { return S_OK; } // 无菜单
+STDMETHODIMP CQiangYinLangBarItem::InitMenu(ITfMenu* pMenu) {
+    // 浮动语言栏路径：把设置项加进系统传来的菜单
+    if (pMenu)
+        pMenu->AddMenuItem(kMenuIdSettings, 0, nullptr, nullptr,
+                           L"设置(&S)...", 7, nullptr);
+    return S_OK;
+}
 
-STDMETHODIMP CQiangYinLangBarItem::OnMenuSelect(UINT) { return S_OK; }
+STDMETHODIMP CQiangYinLangBarItem::OnMenuSelect(UINT wID) {
+    if (wID == kMenuIdSettings && _host) _host->OnLangBarOpenSettings();
+    return S_OK;
+}
 
 STDMETHODIMP CQiangYinLangBarItem::GetIcon(HICON* phIcon) {
     if (!phIcon) return E_POINTER;

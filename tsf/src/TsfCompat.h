@@ -53,7 +53,22 @@ typedef enum TfLBIClick {
 } TfLBIClick;
 #endif
 
-interface ITfMenu;
+#ifndef TF_LBMENUF_SEPARATOR
+#define TF_LBMENUF_CHECKED     0x1
+#define TF_LBMENUF_SUBMENU     0x2
+#define TF_LBMENUF_SEPARATOR   0x4
+#define TF_LBMENUF_RADIOCHECKED 0x8
+#define TF_LBMENUF_GRAYED      0x10
+#endif
+
+DEFINE_GUID(IID_ITfMenu,
+    0x6f8a98e4, 0xaaa0, 0x4f15, 0x8c, 0x5b, 0x07, 0xe0, 0xdf, 0x0a, 0x3d, 0xd8);
+
+struct ITfMenu : public IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE AddMenuItem(
+        UINT uId, DWORD dwFlags, HBITMAP hbmp, HBITMAP hbmpMask,
+        const WCHAR* pch, ULONG cch, ITfMenu** ppMenu) = 0;
+};
 
 DEFINE_GUID(IID_ITfLangBarItemButton,
     0x28c7f1d0, 0xde25, 0x11d2, 0xaf, 0xdd, 0x00, 0x10, 0x5a, 0x27, 0x99, 0xb5);
