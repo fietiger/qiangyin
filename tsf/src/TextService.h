@@ -84,7 +84,7 @@ private:
     HRESULT RequestEditSession(DWORD flags, ITfEditSession* session);
     void UpdateCandidateWindow(TfEditCookie ec, ITfRange* range);
     void HideCandidates();
-    std::vector<std::wstring> CurrentCandidateTexts();
+    std::vector<CandidateItem> CurrentCandidates(); // 候选 + 编码提示
     void InitLangBar();   // Activate：添加任务栏中/英指示项
     void UninitLangBar(); // Deactivate：移除
 

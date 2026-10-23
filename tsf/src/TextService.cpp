@@ -734,8 +734,8 @@ HRESULT CQiangYinTextService::OnEditCancel(TfEditCookie ec) {
 }
 
 void CQiangYinTextService::UpdateCandidateWindow(TfEditCookie ec, ITfRange* range) {
-    auto texts = CurrentCandidateTexts();
-    if (texts.empty()) { HideCandidates(); return; }
+    auto items = CurrentCandidates();
+    if (items.empty()) { HideCandidates(); return; }
 
     // 取组字区的屏幕坐标，把候选窗放下面
     int x = 0, y = 0;
@@ -764,17 +764,20 @@ void CQiangYinTextService::UpdateCandidateWindow(TfEditCookie ec, ITfRange* rang
         }
     }
     if (_candWnd.IsVisible()) {
-        _candWnd.Update(texts);
+        _candWnd.Update(items);
         QYLOG("cand window Update");
     } else {
-        _candWnd.ShowAt(x, y, texts);
-        wchar_t b[128]; wsprintfW(b, L"cand window ShowAt x=%d y=%d n=%u", x, y, (unsigned)texts.size());
+        _candWnd.ShowAt(x, y, items);
+        wchar_t b[128]; wsprintfW(b, L"cand window ShowAt x=%d y=%d n=%u", x, y, (unsigned)items.size());
         qy::log::Write(b);
     }
 }
 
-std::vector<std::wstring> CQiangYinTextService::CurrentCandidateTexts() {
-    std::vector<std::wstring> out;
+// 查当前组字缓冲的候选（文本 + 编码提示）。
+// hint = 该候选完整编码去掉已输入前缀后的剩余部分：
+// 输入 t 时"ta 凸"的提示是 a——照着提示继续打就能上屏该字。
+std::vector<CandidateItem> CQiangYinTextService::CurrentCandidates() {
+    std::vector<CandidateItem> out;
     const std::string& buf = _keyHandler.buffer();
     if (buf.empty()) return out;
     if (!_engineTried) {
@@ -783,8 +786,13 @@ std::vector<std::wstring> CQiangYinTextService::CurrentCandidateTexts() {
             OutputDebugStringW(L"[qiangyin] engine load failed\n");
     }
     if (!_engine.IsLoaded()) return out;
-    for (auto& c : _engine.Query(buf, 10))
-        out.push_back(Utf8ToWide(c.text));
+    for (auto& c : _engine.Query(buf, 10)) {
+        CandidateItem it;
+        it.text = Utf8ToWide(c.text);
+        if (c.code.size() > buf.size())
+            it.hint = Utf8ToWide(c.code.substr(buf.size()));
+        out.push_back(std::move(it));
+    }
     return out;
 }
 

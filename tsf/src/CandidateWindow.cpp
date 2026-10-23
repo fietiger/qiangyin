@@ -39,7 +39,7 @@ void CandidateWindow::Destroy() {
     if (hwnd_) { DestroyWindow(hwnd_); hwnd_ = nullptr; }
 }
 
-void CandidateWindow::ShowAt(int x, int y, const std::vector<std::wstring>& items) {
+void CandidateWindow::ShowAt(int x, int y, const std::vector<CandidateItem>& items) {
     if (!Create()) return;
     items_ = items;
     RecalcSize();
@@ -55,7 +55,7 @@ void CandidateWindow::ShowAt(int x, int y, const std::vector<std::wstring>& item
     InvalidateRect(hwnd_, nullptr, TRUE);
 }
 
-void CandidateWindow::Update(const std::vector<std::wstring>& items) {
+void CandidateWindow::Update(const std::vector<CandidateItem>& items) {
     if (!hwnd_) return;
     items_ = items;
     RecalcSize();
@@ -78,11 +78,18 @@ bool CandidateWindow::IsVisible() const {
 void CandidateWindow::RecalcSize() {
     HDC hdc = GetDC(hwnd_);
     HGDIOBJ old = SelectObject(hdc, font_);
+    SIZE szNum = {};
+    GetTextExtentPoint32W(hdc, L"9. ", 3, &szNum);
+    numW_ = szNum.cx;
     int w = 60;
     for (const auto& s : items_) {
-        SIZE sz = {};
-        GetTextExtentPoint32W(hdc, s.c_str(), (int)s.size(), &sz);
-        if (sz.cx + 40 > w) w = sz.cx + 40;
+        SIZE sz = {}, szHint = {};
+        GetTextExtentPoint32W(hdc, s.text.c_str(), (int)s.text.size(), &sz);
+        if (!s.hint.empty())
+            GetTextExtentPoint32W(hdc, s.hint.c_str(), (int)s.hint.size(), &szHint);
+        // 8 左边距 + 序号列 + 文本 + (6 间隙 + 提示) + 12 右边距
+        int need = 8 + numW_ + sz.cx + (szHint.cx ? 6 + szHint.cx : 0) + 12;
+        if (need > w) w = need;
         lineHeight_ = sz.cy + 8;
     }
     SelectObject(hdc, old);
@@ -101,8 +108,8 @@ void CandidateWindow::OnPaint() {
     for (size_t i = 0; i < items_.size(); ++i) {
         wchar_t num[8];
         wsprintfW(num, L"%d. ", (int)i + 1);
-        std::wstring line = num + items_[i];
-        if (i == 0) {
+        bool first = (i == 0);
+        if (first) {
             // 首选高亮
             RECT hl = {2, y - 2, width_ - 2, y + lineHeight_};
             FillRect(hdc, &hl, reinterpret_cast<HBRUSH>(COLOR_HIGHLIGHT + 1));
@@ -110,7 +117,17 @@ void CandidateWindow::OnPaint() {
         } else {
             SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
         }
-        TextOutW(hdc, 8, y, line.c_str(), (int)line.size());
+        TextOutW(hdc, 8, y, num, (int)wcslen(num));
+        TextOutW(hdc, 8 + numW_, y, items_[i].text.c_str(), (int)items_[i].text.size());
+        // 编码提示：补全该候选还差的编码，灰色弱化
+        if (!items_[i].hint.empty()) {
+            SIZE szText = {};
+            GetTextExtentPoint32W(hdc, items_[i].text.c_str(),
+                                  (int)items_[i].text.size(), &szText);
+            SetTextColor(hdc, first ? RGB(0xC5, 0xDA, 0xF5) : RGB(0x90, 0x90, 0x90));
+            TextOutW(hdc, 8 + numW_ + szText.cx + 6, y,
+                     items_[i].hint.c_str(), (int)items_[i].hint.size());
+        }
         y += lineHeight_;
     }
     SelectObject(hdc, old);
