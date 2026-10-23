@@ -5,6 +5,7 @@
 #include <objbase.h> // CoCreateInstance, StringFromGUID2（显式包含）
 #include "TextService.h"
 #include "Guids.h"
+#include "QyLog.h"
 
 static LONG g_dllRefCount = 0;
 static HMODULE g_hModule = nullptr;
@@ -30,6 +31,7 @@ public:
         return c;
     }
     STDMETHODIMP CreateInstance(IUnknown* pUnkOuter, REFIID riid, void** ppv) override {
+        QYLOG("CreateInstance called");
         if (!ppv) return E_POINTER;
         *ppv = nullptr;
         if (pUnkOuter) return CLASS_E_NOAGGREGATION;
@@ -58,6 +60,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID) {
 }
 
 STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv) {
+    QYLOG("DllGetClassObject called");
     if (!ppv) return E_POINTER;
     *ppv = nullptr;
     if (!IsEqualCLSID(rclsid, CLSID_QiangYinTextService))

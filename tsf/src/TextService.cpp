@@ -5,6 +5,7 @@
 #include <oleauto.h> // SysAllocString, VARIANT
 #include "TextService.h"
 #include "Guids.h"
+#include "QyLog.h"
 #include "Utf.h"
 #include <assert.h>
 
@@ -233,6 +234,7 @@ STDMETHODIMP_(ULONG) CQiangYinTextService::Release() {
 
 // ---- ITfTextInputProcessor ----
 STDMETHODIMP CQiangYinTextService::Activate(ITfThreadMgr* ptim, TfClientId tid) {
+    QYLOG("Activate called");
     _pThreadMgr = ptim;
     _pThreadMgr->AddRef();
     _tfClientId = tid;
@@ -276,6 +278,7 @@ STDMETHODIMP CQiangYinTextService::Activate(ITfThreadMgr* ptim, TfClientId tid) 
 }
 
 STDMETHODIMP CQiangYinTextService::Deactivate() {
+    QYLOG("Deactivate called");
     HideCandidates();
     _keyHandler.Reset();
 
