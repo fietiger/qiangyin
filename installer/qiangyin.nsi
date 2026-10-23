@@ -81,11 +81,46 @@ Section "Uninstall"
   ${DisableX64FSRedirection}
   ExecWait '"$SYSDIR\regsvr32.exe" /s /u "$INSTDIR\qiangyin_ime.dll"'
   ${EnableX64FSRedirection}
-  ; DLL 可能被运行中的程序占用：/REBOOTOK 能删就删，删不掉则排到重启后删除，不报错
+
+  ; 强清：找出占用 DLL 的进程，问用户是否强制结束
+  ; 把 PowerShell 脚本写到临时文件，避免引号嵌套地狱
+  FileOpen $9 "$TEMP\qy_findlock.ps1" w
+  FileWrite $9 '$$p=Get-Process | Where-Object { try { ($$_.Modules.ModuleName -contains "qiangyin_ime.dll") -or ($$_.Modules.ModuleName -contains "qiangyin.dll") } catch { $$false } } | Select-Object -ExpandProperty ProcessName -Unique$\r$\n'
+  FileWrite $9 '$$p -join ","$\r$\n'
+  FileClose $9
+  nsExec::ExecToStack 'powershell -NoProfile -ExecutionPolicy Bypass -File "$TEMP\qy_findlock.ps1"'
+  Pop $0 ; 返回码
+  Pop $1 ; 进程名列表（逗号分隔）
+  Delete "$TEMP\qy_findlock.ps1"
+  ${If} $1 != ""
+    MessageBox MB_YESNO|MB_ICONQUESTION "以下程序正在占用强音输入法文件，无法直接删除：$\n$\n$1$\n$\n是否强制结束这些程序并继续卸载？$\n（未保存的工作可能会丢失，选“否”则改为下次重启时自动清理）" IDYES +2
+    Goto uninstall_fallback
+    ; 用户选是：强制结束占用进程
+    FileOpen $9 "$TEMP\qy_killlock.ps1" w
+    FileWrite $9 'Get-Process | Where-Object { try { ($$_.Modules.ModuleName -contains "qiangyin_ime.dll") -or ($$_.Modules.ModuleName -contains "qiangyin.dll") } catch { $$false } } | Stop-Process -Force$\r$\n'
+    FileClose $9
+    nsExec::ExecToStack 'powershell -NoProfile -ExecutionPolicy Bypass -File "$TEMP\qy_killlock.ps1"'
+    Pop $0
+    Pop $1
+    Delete "$TEMP\qy_killlock.ps1"
+    Sleep 1500 ; 等进程退出释放句柄
+  ${EndIf}
+
+  ; 尝试直接删除（进程已结束，应该能删掉）
+  Delete "$INSTDIR\qiangyin_ime.dll"
+  Delete "$INSTDIR\qiangyin.dll"
+  Delete "$INSTDIR\qiangyin_ime.dll.old"
+  Delete "$INSTDIR\qiangyin.dll.old"
+  Goto uninstall_common
+
+  uninstall_fallback:
+  ; 用户选否：排到重启后删除，不报错
   Delete /REBOOTOK "$INSTDIR\qiangyin_ime.dll"
   Delete /REBOOTOK "$INSTDIR\qiangyin.dll"
   Delete /REBOOTOK "$INSTDIR\qiangyin_ime.dll.old"
   Delete /REBOOTOK "$INSTDIR\qiangyin.dll.old"
+
+  uninstall_common:
   Delete "$INSTDIR\mb.txt"
   Delete "$INSTDIR\usercode.txt"
   Delete "$INSTDIR\Uninstall.exe"
