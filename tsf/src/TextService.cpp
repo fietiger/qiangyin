@@ -487,10 +487,14 @@ static HRESULT SetRangeAttribute(TfEditCookie ec, ITfContext* pic, ITfRange* ran
     if (FAILED(hr)) return hr;
     ITfDisplayAttributeInfo* pInfo = nullptr;
     TfGuidAtom atom = TF_INVALID_GUIDATOM;
-    // 注意：mingw 的 msctf.h 把第三个参数误声明为 CLSID*，
-    // MS SDK 原生是 TfGuidAtom*；这里转一下，两边都能编译，vtable 一致。
+#ifdef __MINGW32__
+    // mingw-w64 的 msctf.h 把第三个参数误声明为 CLSID*，
+    // MS SDK 原生是 TfGuidAtom*（已知头文件 bug，vtable 布局一致）
     hr = pMgr->GetDisplayAttributeInfo(GUID_QiangYinDisplayAttr, &pInfo,
                                       reinterpret_cast<CLSID*>(&atom));
+#else
+    hr = pMgr->GetDisplayAttributeInfo(GUID_QiangYinDisplayAttr, &pInfo, &atom);
+#endif
     if (SUCCEEDED(hr)) {
         ITfProperty* pProp = nullptr;
         if (SUCCEEDED(pic->GetProperty(GUID_PROP_ATTRIBUTE, &pProp))) {
