@@ -24,6 +24,12 @@ SetCompressor /SOLID lzma
 
 Section "强音输入法" SecMain
   SetOutPath "$INSTDIR"
+
+  ; 先尝试反注册已存在的旧版本（避免旧 DLL 被占用导致无法覆盖）
+  ${DisableX64FSRedirection}
+  ExecWait '"$SYSDIR\regsvr32.exe" /s /u "$INSTDIR\qiangyin_ime.dll"'
+  ${EnableX64FSRedirection}
+
   File "..\build-installer\staging\qiangyin_ime.dll"
   File "..\build-installer\staging\qiangyin.dll"
   File "..\build-installer\staging\mb.txt"
