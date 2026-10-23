@@ -103,7 +103,8 @@ return true;
 }
 }
 if (start) host_->OnCompositionStarted();
-else host_->OnCompositionUpdated(buffer_);
+// 第一个码也要刷新组字内容和候选窗，否则用户感觉像没击键（盲打）
+host_->OnCompositionUpdated(buffer_);
 return true;
 }
 
