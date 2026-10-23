@@ -197,7 +197,7 @@ std::vector<qy::Candidate> CQiangYinTextService::EngineQueryTrampoline(
     if (!self->_engine.IsLoaded()) { QYLOG("query: engine not loaded"); return out; }
     for (auto& c : self->_engine.Query(prefix, 9))
         out.push_back({c.text, c.code});
-    { wchar_t b[128]; wsprintfW(b, L"query prefix=%S -> %zu candidates", prefix.c_str(), out.size()); qy::log::Write(b); }
+    { wchar_t b[128]; wsprintfW(b, L"query prefix=%S -> %u candidates", prefix.c_str(), (unsigned)out.size()); qy::log::Write(b); }
     return out;
 }
 
@@ -596,10 +596,14 @@ void CQiangYinTextService::UpdateCandidateWindow(TfEditCookie ec, ITfRange* rang
         GetCaretPos(&pt);
         x = pt.x; y = pt.y + 20;
     }
-    if (_candWnd.IsVisible())
+    if (_candWnd.IsVisible()) {
         _candWnd.Update(texts);
-    else
+        QYLOG("cand window Update");
+    } else {
         _candWnd.ShowAt(x, y, texts);
+        wchar_t b[128]; wsprintfW(b, L"cand window ShowAt x=%d y=%d n=%u", x, y, (unsigned)texts.size());
+        qy::log::Write(b);
+    }
 }
 
 std::vector<std::wstring> CQiangYinTextService::CurrentCandidateTexts() {

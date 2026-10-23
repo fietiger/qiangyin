@@ -89,7 +89,7 @@ bool Engine::Load() {
         paths.push_back(userUtf8.c_str());
     }
     if (pLoad_(engine_, paths.data(), paths.size()) < 0) { QYLOG("Engine::Load qy_load failed"); Unload(); return false; }
-    { wchar_t b[128]; wsprintfW(b, L"Engine::Load OK count=%llu", (unsigned long long)pCount_(engine_)); qy::log::Write(b); }
+    { wchar_t b[128]; wsprintfW(b, L"Engine::Load OK count=%lu", (unsigned long)pCount_(engine_)); qy::log::Write(b); }
     return true;
 }
 
