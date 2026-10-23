@@ -2,6 +2,7 @@
 #include <new> // std::nothrow
 #include <windows.h>
 #include <msctf.h>
+#include <objbase.h> // CoCreateInstance, StringFromGUID2（显式包含）
 #include "TextService.h"
 #include "Guids.h"
 

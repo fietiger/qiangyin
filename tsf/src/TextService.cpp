@@ -1,6 +1,8 @@
 // 强音 TSF 文本服务实现
 #include <new> // std::nothrow
 #include <utility> // std::move
+#include <objbase.h> // CoCreateInstance（显式包含，不依赖 msctf.h 的传递）
+#include <oleauto.h> // SysAllocString, VARIANT
 #include "TextService.h"
 #include "Guids.h"
 #include "Utf.h"

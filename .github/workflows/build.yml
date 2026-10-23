@@ -39,13 +39,31 @@ jobs:
   tsf:
     # 强音输入法 TSF 外壳（C++）：MSVC 编译出 qiangyin_ime.dll
     runs-on: windows-latest
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v4
       - uses: ilammy/msvc-dev-cmd@v1
       - name: configure
         run: cmake -S tsf -B build-tsf -A x64
       - name: build
-        run: cmake --build build-tsf --config Release
+        id: build
+        shell: pwsh
+        run: |
+          cmake --build build-tsf --config Release 2>&1 | Tee-Object -FilePath build-tsf.log
+          exit $LASTEXITCODE
+      - name: report build errors
+        if: failure() && steps.build.outcome == 'failure'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $log = Get-Content build-tsf.log -Raw
+          if ($log.Length -gt 50000) { $log = "...(截断)..." + $log.Substring($log.Length - 50000) }
+          $bt = [char]96 * 3
+          $body = "tsf 任务 MSVC 构建失败，commit: $env:GITHUB_SHA`n`n$bt`n$log`n$bt"
+          gh issue create --title "[auto] TSF MSVC 构建失败" --body $body --label bug
       - name: upload ime dll
         uses: actions/upload-artifact@v4
         with:
