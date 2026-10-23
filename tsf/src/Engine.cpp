@@ -65,8 +65,10 @@ bool Engine::Load() {
     if (mb.empty()) { Unload(); return false; }
 
     // 路径用 UTF-8 传给 Rust（qy_load 要求 UTF-8）
-    auto toUtf8 = [](const std::wstring& w) {
+    auto toUtf8 = [](const std::wstring& w) -> std::string {
+        if (w.empty()) return std::string();
         int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        if (n <= 1) return std::string();
         std::string s(n - 1, 0);
         WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, &s[0], n, nullptr, nullptr);
         return s;
