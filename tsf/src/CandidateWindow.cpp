@@ -39,9 +39,12 @@ void CandidateWindow::Destroy() {
     if (hwnd_) { DestroyWindow(hwnd_); hwnd_ = nullptr; }
 }
 
-void CandidateWindow::ShowAt(int x, int y, const std::vector<CandidateItem>& items) {
+void CandidateWindow::ShowAt(int x, int y, const std::vector<CandidateItem>& items,
+                             int page, int pageCount) {
     if (!Create()) return;
     items_ = items;
+    page_ = page;
+    pageCount_ = pageCount;
     RecalcSize();
     // 防止超出屏幕右/下边缘
     int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
@@ -55,9 +58,12 @@ void CandidateWindow::ShowAt(int x, int y, const std::vector<CandidateItem>& ite
     InvalidateRect(hwnd_, nullptr, TRUE);
 }
 
-void CandidateWindow::Update(const std::vector<CandidateItem>& items) {
+void CandidateWindow::Update(const std::vector<CandidateItem>& items,
+                             int page, int pageCount) {
     if (!hwnd_) return;
     items_ = items;
+    page_ = page;
+    pageCount_ = pageCount;
     RecalcSize();
     RECT rc; GetWindowRect(hwnd_, &rc);
     SetWindowPos(hwnd_, nullptr, 0, 0, width_,
@@ -78,17 +84,21 @@ bool CandidateWindow::IsVisible() const {
 void CandidateWindow::RecalcSize() {
     HDC hdc = GetDC(hwnd_);
     HGDIOBJ old = SelectObject(hdc, font_);
-    SIZE szNum = {};
+    SIZE szNum = {}, szPage = {};
     GetTextExtentPoint32W(hdc, L"9. ", 3, &szNum);
     numW_ = szNum.cx;
+    wchar_t page[16] = {0};
+    wsprintfW(page, L"%d/%d", page_, pageCount_);
+    GetTextExtentPoint32W(hdc, page, (int)wcslen(page), &szPage);
+    pageW_ = szPage.cx + 10; // 右侧页码列（含间隙）
     int w = 60;
     for (const auto& s : items_) {
         SIZE sz = {}, szHint = {};
         GetTextExtentPoint32W(hdc, s.text.c_str(), (int)s.text.size(), &sz);
         if (!s.hint.empty())
             GetTextExtentPoint32W(hdc, s.hint.c_str(), (int)s.hint.size(), &szHint);
-        // 8 左边距 + 序号列 + 文本 + (6 间隙 + 提示) + 12 右边距
-        int need = 8 + numW_ + sz.cx + (szHint.cx ? 6 + szHint.cx : 0) + 12;
+        // 8 左边距 + 序号列 + 文本 + (6 间隙 + 提示) + 页码列 + 12 右边距
+        int need = 8 + numW_ + sz.cx + (szHint.cx ? 6 + szHint.cx : 0) + pageW_ + 12;
         if (need > w) w = need;
         lineHeight_ = sz.cy + 8;
     }
@@ -104,6 +114,16 @@ void CandidateWindow::OnPaint() {
     SetBkMode(hdc, TRANSPARENT);
     RECT rc; GetClientRect(hwnd_, &rc);
     FillRect(hdc, &rc, reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1));
+    // 右上角页码 "n/m"（首选高亮行上，灰色弱化）
+    if (pageCount_ > 1) {
+        wchar_t page[16] = {0};
+        wsprintfW(page, L"%d/%d", page_, pageCount_);
+        int len = (int)wcslen(page);
+        SIZE szPage = {};
+        GetTextExtentPoint32W(hdc, page, len, &szPage);
+        SetTextColor(hdc, RGB(0x90, 0x90, 0x90));
+        TextOutW(hdc, width_ - 8 - szPage.cx, 4, page, len);
+    }
     int y = 4;
     for (size_t i = 0; i < items_.size(); ++i) {
         wchar_t num[8];

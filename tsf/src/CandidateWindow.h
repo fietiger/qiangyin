@@ -22,9 +22,9 @@ public:
 
     bool Create();
     void Destroy();
-    // 在屏幕坐标 (x, y) 显示，items 为候选（文本 + 编码提示）
-    void ShowAt(int x, int y, const std::vector<CandidateItem>& items);
-    void Update(const std::vector<CandidateItem>& items);
+    // 在屏幕坐标 (x, y) 显示；items 为当前页候选，page/pageCount 为页码（1 起）
+    void ShowAt(int x, int y, const std::vector<CandidateItem>& items, int page, int pageCount);
+    void Update(const std::vector<CandidateItem>& items, int page, int pageCount);
     void Hide();
     bool IsVisible() const;
 
@@ -36,9 +36,12 @@ private:
     HWND hwnd_ = nullptr;
     HFONT font_ = nullptr;
     std::vector<CandidateItem> items_;
+    int page_ = 1;        // 当前页（1 起）
+    int pageCount_ = 1;   // 总页数
     int lineHeight_ = 24;
     int width_ = 120;
     int numW_ = 24; // 序号 "N. " 列宽
+    int pageW_ = 0; // 页码 "n/m" 宽度
 };
 
 } // namespace qy

@@ -197,7 +197,8 @@ std::vector<qy::Candidate> CQiangYinTextService::EngineQueryTrampoline(
             OutputDebugStringW(L"[qiangyin] engine load failed\n");
     }
     if (!self->_engine.IsLoaded()) { QYLOG("query: engine not loaded"); return out; }
-    size_t limit = (size_t)self->settings_.candidateCount;
+    // 翻页需要整表候选（KeyHandler 按页切片），上限 kMaxCandidates
+    size_t limit = KeyHandler::kMaxCandidates;
     for (auto& c : self->_engine.Query(prefix, limit))
         out.push_back({c.text, c.code});
     { wchar_t b[128]; wsprintfW(b, L"query prefix=%S -> %u candidates", prefix.c_str(), (unsigned)out.size()); qy::log::Write(b); }
@@ -803,8 +804,22 @@ HRESULT CQiangYinTextService::OnEditCancel(TfEditCookie ec) {
 }
 
 void CQiangYinTextService::UpdateCandidateWindow(TfEditCookie ec, ITfRange* range) {
-    auto items = CurrentCandidates();
-    if (items.empty()) { HideCandidates(); return; }
+    // 当前页切片 + 总数（翻页状态在 KeyHandler 里）
+    size_t total = 0;
+    auto cands = _keyHandler.CurrentPage(&total);
+    if (cands.empty()) { HideCandidates(); return; }
+    size_t pageSize = (size_t)settings_.candidateCount;
+    int pageCount = (int)((total + pageSize - 1) / pageSize);
+
+    std::vector<CandidateItem> items;
+    const std::string& buf = _keyHandler.buffer();
+    for (auto& c : cands) {
+        CandidateItem it;
+        it.text = Utf8ToWide(c.text);
+        if (settings_.showHint && c.code.size() > buf.size())
+            it.hint = Utf8ToWide(c.code.substr(buf.size()));
+        items.push_back(std::move(it));
+    }
 
     // 取组字区的屏幕坐标，把候选窗放下面
     int x = 0, y = 0;
@@ -833,36 +848,14 @@ void CQiangYinTextService::UpdateCandidateWindow(TfEditCookie ec, ITfRange* rang
         }
     }
     if (_candWnd.IsVisible()) {
-        _candWnd.Update(items);
+        _candWnd.Update(items, _keyHandler.page() + 1, pageCount);
         QYLOG("cand window Update");
     } else {
-        _candWnd.ShowAt(x, y, items);
-        wchar_t b[128]; wsprintfW(b, L"cand window ShowAt x=%d y=%d n=%u", x, y, (unsigned)items.size());
+        _candWnd.ShowAt(x, y, items, _keyHandler.page() + 1, pageCount);
+        wchar_t b[128]; wsprintfW(b, L"cand window ShowAt x=%d y=%d n=%u page=%d/%d",
+                                  x, y, (unsigned)items.size(), _keyHandler.page() + 1, pageCount);
         qy::log::Write(b);
     }
-}
-
-// 查当前组字缓冲的候选（文本 + 编码提示）。
-// hint = 该候选完整编码去掉已输入前缀后的剩余部分：
-// 输入 t 时"ta 凸"的提示是 a——照着提示继续打就能上屏该字。
-std::vector<CandidateItem> CQiangYinTextService::CurrentCandidates() {
-    std::vector<CandidateItem> out;
-    const std::string& buf = _keyHandler.buffer();
-    if (buf.empty()) return out;
-    if (!_engineTried) {
-        _engineTried = true;
-        if (!_engine.Load())
-            OutputDebugStringW(L"[qiangyin] engine load failed\n");
-    }
-    if (!_engine.IsLoaded()) return out;
-    for (auto& c : _engine.Query(buf, (size_t)settings_.candidateCount)) {
-        CandidateItem it;
-        it.text = Utf8ToWide(c.text);
-        if (settings_.showHint && c.code.size() > buf.size())
-            it.hint = Utf8ToWide(c.code.substr(buf.size()));
-        out.push_back(std::move(it));
-    }
-    return out;
 }
 
 void CQiangYinTextService::HideCandidates() {

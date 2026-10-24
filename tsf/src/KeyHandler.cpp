@@ -59,6 +59,39 @@ void KeyHandler::Reset() {
 buffer_.clear();
 shiftDown_ = false;
 shiftUsed_ = false;
+page_ = 0;
+}
+
+size_t KeyHandler::PageSize() const {
+return settings_ ? (size_t)settings_->candidateCount : 10;
+}
+
+int KeyHandler::PageCount() const {
+size_t total = QueryCandidates().size();
+if (total == 0) return 0;
+return (int)((total + PageSize() - 1) / PageSize());
+}
+
+void KeyHandler::PageMove(int delta) {
+int pc = PageCount();
+if (pc <= 1) return; // 只有一页（或没有候选）不翻
+int p = page_ + delta;
+if (p < 0) p = 0;
+if (p > pc - 1) p = pc - 1;
+if (p != page_) {
+page_ = p;
+// buffer 没变，借组字刷新通道让候选窗重画当前页
+host_->OnCompositionUpdated(buffer_);
+}
+}
+
+std::vector<Candidate> KeyHandler::CurrentPage(size_t* totalOut) const {
+std::vector<Candidate> all = QueryCandidates();
+if (totalOut) *totalOut = all.size();
+size_t start = (size_t)page_ * PageSize();
+if (start >= all.size()) return {};
+size_t n = PageSize() < all.size() - start ? PageSize() : all.size() - start;
+return std::vector<Candidate>(all.begin() + (long)start, all.begin() + (long)(start + n));
 }
 
 bool KeyHandler::HasCtrlAlt() const {
@@ -77,11 +110,16 @@ return {};
 
 void KeyHandler::CommitTopCandidate() {
 auto cands = QueryCandidates();
-if (!cands.empty())
-host_->OnCommitText(cands[0].text);
-else
-host_->OnCommitText(buffer_); // 无候选：原样上屏（极少见）
+if (!cands.empty()) {
+// 空格/标点兜底上屏：当前页的首选（与候选窗所见一致）
+size_t idx = (size_t)page_ * PageSize();
+if (idx >= cands.size()) idx = 0;
+	host_->OnCommitText(cands[idx].text);
+} else {
+	host_->OnCommitText(buffer_); // 无候选：原样上屏（极少见）
+}
 buffer_.clear();
+page_ = 0;
 }
 
 void KeyHandler::ToggleMode() {
@@ -150,6 +188,16 @@ bool KeyHandler::WouldEatKey(UINT vkey, LPARAM /*lParam*/) const {
 	if (vkey == VK_OEM_PERIOD && CtrlOnly())
 	return true; // Ctrl+.：切换中文/英文标点（经典 IME 快捷键）
 
+	// 翻页键：-/= 与 ↑/↓（组字中；Shift/Ctrl/Alt 组合放行给应用）
+	{
+	bool noMod = !((GetKeyState(VK_SHIFT) | GetKeyState(VK_CONTROL) |
+	                GetKeyState(VK_MENU)) & 0x8000);
+	if (composing() && noMod &&
+	    (vkey == VK_OEM_MINUS || vkey == VK_OEM_PLUS ||
+	     vkey == VK_UP || vkey == VK_DOWN))
+	return true;
+	}
+
 	if (HasCtrlAlt()) return false; // 快捷键一律放行
 
 	if (vkey == VK_SHIFT || vkey == VK_LSHIFT || vkey == VK_RSHIFT)
@@ -214,8 +262,18 @@ return true; // 吃掉，等 KeyUp 再决定是否切换
 	return false;
 	}
 
+	// 翻页：- = ↑ ↓（原版超强音形同款：组字中按 -/= 纯翻页，不上屏）
+	if (composing() && !shiftDown_ &&
+	    (vkey == VK_OEM_MINUS || vkey == VK_OEM_PLUS ||
+	     vkey == VK_UP || vkey == VK_DOWN)) {
+	if (vkey == VK_OEM_MINUS || vkey == VK_UP) PageMove(-1);
+	else PageMove(1);
+	return true;
+	}
+
 	if (vkey >= 'A' && vkey <= 'Z') {
 	bool start = buffer_.empty();
+	page_ = 0; // 新码开始，回到第一页
 	buffer_ += static_cast<char>(vkey - 'A' + 'a');
 	// 四键上屏：满 4 码且唯一候选时直接上屏（超强音形行为），不用等空格
 	if (AutoCommitFull() && buffer_.size() >= 4) {
@@ -233,15 +291,16 @@ host_->OnCompositionUpdated(buffer_);
 return true;
 }
 
-if (vkey == VK_BACK) {
-// ★ 核心修复：组字缓冲非空时，退格只删缓冲里的字符，
-// 必须吃掉，绝不能漏到输入框（原 bug：把 D 删了）。
-if (!composing()) return false;
-buffer_.pop_back();
-if (buffer_.empty()) host_->OnCancelComposition();
-else host_->OnCompositionUpdated(buffer_);
-return true;
-}
+	if (vkey == VK_BACK) {
+	// ★ 核心修复：组字缓冲非空时，退格只删缓冲里的字符，
+	// 必须吃掉，绝不能漏到输入框（原 bug：把 D 删了）。
+	if (!composing()) return false;
+	buffer_.pop_back();
+	page_ = 0;
+	if (buffer_.empty()) host_->OnCancelComposition();
+	else host_->OnCompositionUpdated(buffer_);
+	return true;
+	}
 
 	if (vkey == VK_SPACE) {
 	if (!composing()) {
@@ -259,17 +318,19 @@ return true;
 		CommitTopCandidate();
 	} else {
 		buffer_.clear();
+		page_ = 0;
 		host_->OnCancelComposition();
 	}
 	return true;
 	}
 
-if (vkey == VK_ESCAPE) {
-if (!composing()) return false;
-buffer_.clear();
-host_->OnCancelComposition();
-return true;
-}
+	if (vkey == VK_ESCAPE) {
+	if (!composing()) return false;
+	buffer_.clear();
+	page_ = 0;
+	host_->OnCancelComposition();
+	return true;
+	}
 
 	// 全角模式：非组字时数字直接上全角（Shift+数字走标点表出 ！＠＃ 等，不在此处理）
 	if (fullShape_ && !composing() && !shiftDown_ && vkey >= '0' && vkey <= '9') {
@@ -278,20 +339,22 @@ return true;
 	}
 
 	if ((vkey >= '1' && vkey <= '9') || vkey == '0' || vkey == VK_OEM_1 || vkey == VK_OEM_7) {
-if (!composing()) return false;
-auto cands = QueryCandidates();
-size_t idx = 0;
-if (vkey >= '1' && vkey <= '9') idx = static_cast<size_t>(vkey - '1');
-else if (vkey == '0') idx = 9;                    // 0=第10候选
-else if (vkey == VK_OEM_1) idx = 1;               // ;=第2候选
-else if (vkey == VK_OEM_7) idx = 2;               // '=第3候选
-if (idx < cands.size()) {
-host_->OnCommitText(cands[idx].text);
-buffer_.clear();
-}
-// 序号越界也吃掉：保持组字状态不乱
-return true;
-}
+	if (!composing()) return false;
+	auto cands = QueryCandidates();
+	size_t idx = 0; // 页内序号
+	if (vkey >= '1' && vkey <= '9') idx = static_cast<size_t>(vkey - '1');
+	else if (vkey == '0') idx = 9;                    // 0=第10候选
+	else if (vkey == VK_OEM_1) idx = 1;               // ;=第2候选
+	else if (vkey == VK_OEM_7) idx = 2;               // '=第3候选
+	size_t absIdx = (size_t)page_ * PageSize() + idx; // 翻页后选的是当前页的候选
+	if (absIdx < cands.size()) {
+		host_->OnCommitText(cands[absIdx].text);
+		buffer_.clear();
+		page_ = 0;
+	}
+	// 序号越界也吃掉：保持组字状态不乱
+	return true;
+	}
 
 	std::string punct;
 	if (ChinesePunct() && IsPunctKey(vkey, punct)) {

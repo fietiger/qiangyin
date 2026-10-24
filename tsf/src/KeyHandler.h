@@ -52,6 +52,15 @@ public:
     const std::string& buffer() const { return buffer_; }
     bool composing() const { return !buffer_.empty(); }
 
+    // 候选翻页（-/= 与 ↑/↓）。查询上限：深翻页封顶（v 开头 161 条全够用）
+    static constexpr size_t kMaxCandidates = 500;
+    size_t PageSize() const;             // 每页个数 = 设置的候选数量
+    int PageCount() const;               // 总页数（按查询上限截断）
+    void PageMove(int delta);            // 翻页（边界夹紧，不环绕）
+    // 当前页候选切片；totalOut（可空）返回候选总数
+    std::vector<Candidate> CurrentPage(size_t* totalOut = nullptr) const;
+    int page() const { return page_; }
+
     void SetEngineQuery(std::vector<Candidate> (*query)(const std::string&, void*),
                         void* ctx) {
         query_ = query; queryCtx_ = ctx;
@@ -76,6 +85,7 @@ private:
     const Settings* settings_ = nullptr;
     bool chinese_ = true;      // 默认中文模式
     bool fullShape_ = false;   // 全角模式：直通类按键输出全角（编码输入不受影响）
+    int page_ = 0;             // 候选当前页（0 起；缓冲变化时归零）
     std::string buffer_;       // 组字缓冲：a-z
     bool shiftDown_ = false;   // Shift 是否按下（用于点按检测）
     bool shiftUsed_ = false;   // Shift 按下期间有无其他按键
