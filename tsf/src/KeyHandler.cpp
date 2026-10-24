@@ -133,14 +133,22 @@ void KeyHandler::ToggleMode() {
 void KeyHandler::SetChineseMode(bool chinese) {
     if (chinese == chinese_) return;
     if (composing()) {
-        // 切换时组字怎么处理：清空（默认，直接切）或上屏首选（原版风格）
-        if (SwitchClears()) {
+        // 切换时组字怎么处理（与 Enter 三态同构）：
+        // 0=清空（默认，直接切）1=上屏首选（原版风格）2=编码上屏（字母原样进文）
+        switch (SwitchMode()) {
+        case 1:
+            CommitTopCandidate();
+            break;
+        case 2:
+            host_->OnCommitText(buffer_);
+            buffer_.clear();
+            page_ = 0;
+            break;
+        default:
             buffer_.clear();
             page_ = 0;
             host_->OnCancelComposition();
-        } else {
-            // 切换前先把组字上屏，避免中英文切换丢组字——这正是原 bug 的场景
-            CommitTopCandidate();
+            break;
         }
     }
     chinese_ = chinese;

@@ -642,12 +642,25 @@ void CQiangYinTextService::InitLangBar() {
         QYLOG("InitLangBar: no ITfLangBarItemMgr");
         return;
     }
+    // 自愈：清掉同 GUID 的残留项。Deactivate 时线程管理器可能已在拆除，
+    // RemoveItem 静默失败会让系统 sink 状态错乱——重激活后系统不再
+    // AdviseSink，指示就不显示（要等一次状态变化才回来）。
+    // 先 GetItem+RemoveItem 强制系统走全新接入路径。
+    {
+        ITfLangBarItem* stale = nullptr;
+        if (SUCCEEDED(pMgr->GetItem(GUID_QY_LBI_INPUTMODE, &stale)) && stale) {
+            pMgr->RemoveItem(stale);
+            stale->Release();
+            QYLOG("InitLangBar: removed stale item");
+        }
+    }
     _pLangBarItem = new (std::nothrow) CQiangYinLangBarItem(
         static_cast<ILangBarHost*>(this), _keyHandler.chinese_mode());
     if (!_pLangBarItem) { pMgr->Release(); return; }
     HRESULT hr = pMgr->AddItem(_pLangBarItem);
-    wchar_t b[64];
-    wsprintfW(b, L"InitLangBar AddItem hr=0x%08X", (DWORD)hr);
+    wchar_t b[96];
+    wsprintfW(b, L"InitLangBar AddItem hr=0x%08X tid=%lu",
+              (DWORD)hr, GetCurrentThreadId());
     qy::log::Write(b);
     pMgr->Release();
 }

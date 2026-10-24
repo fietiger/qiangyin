@@ -19,11 +19,14 @@ INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         CheckDlgButton(h, IDC_FULL_SHAPE,     s->fullShape ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(h, IDC_ENG_HALFWIDTH,  s->engAutoHalfWidth ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(h, IDC_ENG_ENPUNCT,    s->engAutoEnPunct ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(h, IDC_SWITCH_CLEAR,   s->switchClears ? BST_CHECKED : BST_UNCHECKED);
         // Enter 行为三选一（组内 WS_GROUP 在 IDC_ENTER_CLEARS）
         CheckRadioButton(h, IDC_ENTER_CLEARS, IDC_ENTER_CODE,
                          s->enterMode == 2 ? IDC_ENTER_CODE :
                          s->enterMode == 1 ? IDC_ENTER_COMMIT : IDC_ENTER_CLEARS);
+        // 切换中/英时三选一
+        CheckRadioButton(h, IDC_SW_CLEARS, IDC_SW_CODE,
+                         s->switchMode == 2 ? IDC_SW_CODE :
+                         s->switchMode == 1 ? IDC_SW_COMMIT : IDC_SW_CLEARS);
         HWND cb = GetDlgItem(h, IDC_CAND_COMBO);
         for (int n = 5; n <= 10; ++n) {
             wchar_t s[4] = {0};
@@ -48,7 +51,10 @@ INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             s->fullShape     = IsDlgButtonChecked(h, IDC_FULL_SHAPE) == BST_CHECKED;
             s->engAutoHalfWidth = IsDlgButtonChecked(h, IDC_ENG_HALFWIDTH) == BST_CHECKED;
             s->engAutoEnPunct   = IsDlgButtonChecked(h, IDC_ENG_ENPUNCT) == BST_CHECKED;
-            s->switchClears     = IsDlgButtonChecked(h, IDC_SWITCH_CLEAR) == BST_CHECKED;
+            // 切换中/英时三选一
+            if (IsDlgButtonChecked(h, IDC_SW_CODE) == BST_CHECKED)            s->switchMode = 2;
+            else if (IsDlgButtonChecked(h, IDC_SW_COMMIT) == BST_CHECKED)     s->switchMode = 1;
+            else                                                               s->switchMode = 0;
             if (IsDlgButtonChecked(h, IDC_ENTER_CODE) == BST_CHECKED)          s->enterMode = 2;
             else if (IsDlgButtonChecked(h, IDC_ENTER_COMMIT) == BST_CHECKED)   s->enterMode = 1;
             else                                                               s->enterMode = 0;

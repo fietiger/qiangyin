@@ -21,7 +21,12 @@ void Settings::Load() {
           m = ReadDword(L"EnterClears", 1) != 0 ? 0 : 1;
       enterMode = (m <= 2) ? (int)m : 0;
     }
-    switchClears   = ReadDword(L"SwitchClears", 1) != 0;
+    { // SwitchMode：0=清空组字 1=上屏首选 2=编码上屏；兼容旧版 SwitchClears
+      DWORD m = ReadDword(L"SwitchMode", 0xFFFFFFFF);
+      if (m == 0xFFFFFFFF)
+          m = ReadDword(L"SwitchClears", 1) != 0 ? 0 : 1;
+      switchMode = (m <= 2) ? (int)m : 0;
+    }
     alwaysChinese  = ReadDword(L"AlwaysChinese", 0) != 0;
     chinesePunct   = ReadDword(L"ChinesePunct", 1) != 0;
     fullShape      = ReadDword(L"FullShape", 0) != 0;
@@ -40,7 +45,7 @@ bool Settings::Save() const {
         {L"ShowHint",       showHint ? 1u : 0u},
         {L"AutoCommitFull", autoCommitFull ? 1u : 0u},
         {L"EnterMode",      static_cast<DWORD>(enterMode)},
-        {L"SwitchClears",   switchClears ? 1u : 0u},
+        {L"SwitchMode",     static_cast<DWORD>(switchMode)},
         {L"AlwaysChinese",  alwaysChinese ? 1u : 0u},
         {L"ChinesePunct",   chinesePunct ? 1u : 0u},
         {L"FullShape",      fullShape ? 1u : 0u},
