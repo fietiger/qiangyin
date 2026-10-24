@@ -170,17 +170,18 @@ STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const REC
     if (click == TF_LBI_CLK_LEFT) {
         if (_host) _host->OnLangBarToggleMode();
     } else if (click == TF_LBI_CLK_RIGHT && _host) {
-        // 右键菜单：借用当前进程的焦点窗口当属主（weasel 同款做法）
+        // 右键菜单：借用当前进程的焦点窗口当属主（weasel 同款做法）。
+        // \t 后是快捷键，菜单会右对齐显示在加速键栏
         HMENU menu = CreatePopupMenu();
         AppendMenuW(menu,
                     MF_STRING | (_host->LangBarIsChinesePunct() ? MF_CHECKED : 0),
-                    kMenuIdPunct, L"中文标点(&P)");
+                    kMenuIdPunct, L"中文标点\tCtrl+.");
         AppendMenuW(menu,
                     MF_STRING | (_host->LangBarIsFullShape() ? MF_CHECKED : 0),
-                    kMenuIdFullShape, L"全角模式(&F)");
+                    kMenuIdFullShape, L"全角模式\tShift+空格");
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(menu, MF_STRING, kMenuIdUserDict, L"打开用户词库(&U)...");
-        AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"设置(&S)...");
+        AppendMenuW(menu, MF_STRING, kMenuIdUserDict, L"打开用户词库...");
+        AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"设置...");
         HWND owner = GetFocus();
         if (!owner) owner = GetForegroundWindow();
         if (owner) {
@@ -205,14 +206,14 @@ STDMETHODIMP CQiangYinLangBarItem::InitMenu(ITfMenu* pMenu) {
     if (pMenu && _host) {
         pMenu->AddMenuItem(kMenuIdPunct,
                            _host->LangBarIsChinesePunct() ? TF_LBMENUF_CHECKED : 0,
-                           nullptr, nullptr, L"中文标点", 4, nullptr);
+                           nullptr, nullptr, L"中文标点\tCtrl+.", 11, nullptr);
         pMenu->AddMenuItem(kMenuIdFullShape,
                            _host->LangBarIsFullShape() ? TF_LBMENUF_CHECKED : 0,
-                           nullptr, nullptr, L"全角模式", 4, nullptr);
+                           nullptr, nullptr, L"全角模式\tShift+空格", 12, nullptr);
         pMenu->AddMenuItem(kMenuIdUserDict, 0, nullptr, nullptr,
                            L"打开用户词库", 6, nullptr);
         pMenu->AddMenuItem(kMenuIdSettings, 0, nullptr, nullptr,
-                           L"设置(&S)...", 7, nullptr);
+                           L"设置...", 4, nullptr);
     }
     return S_OK;
 }

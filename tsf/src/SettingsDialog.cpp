@@ -17,16 +17,18 @@ INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         CheckDlgButton(h, IDC_CHINESE_PUNCT,  s->chinesePunct ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(h, IDC_ALWAYS_CHINESE, s->alwaysChinese ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(h, IDC_FULL_SHAPE,     s->fullShape ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(h, IDC_ENG_HALFWIDTH,  s->engAutoHalfWidth ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(h, IDC_ENG_ENPUNCT,    s->engAutoEnPunct ? BST_CHECKED : BST_UNCHECKED);
         CheckRadioButton(h, IDC_ENTER_CLEARS, IDC_ENTER_COMMIT,
                          s->enterClears ? IDC_ENTER_CLEARS : IDC_ENTER_COMMIT);
         HWND cb = GetDlgItem(h, IDC_CAND_COMBO);
         for (int n = 5; n <= 10; ++n) {
             wchar_t s[4] = {0};
-            _itow(n, s, 10);
+            wsprintfW(s, L"%d", n);
             ComboBox_AddString(cb, s);
         }
         wchar_t cur[4] = {0};
-        _itow(s->candidateCount, cur, 10);
+        wsprintfW(cur, L"%d", s->candidateCount);
         ComboBox_SelectString(cb, -1, cur);
         return TRUE; // 焦点给默认按钮
     }
@@ -41,6 +43,8 @@ INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             s->chinesePunct  = IsDlgButtonChecked(h, IDC_CHINESE_PUNCT) == BST_CHECKED;
             s->alwaysChinese = IsDlgButtonChecked(h, IDC_ALWAYS_CHINESE) == BST_CHECKED;
             s->fullShape     = IsDlgButtonChecked(h, IDC_FULL_SHAPE) == BST_CHECKED;
+            s->engAutoHalfWidth = IsDlgButtonChecked(h, IDC_ENG_HALFWIDTH) == BST_CHECKED;
+            s->engAutoEnPunct   = IsDlgButtonChecked(h, IDC_ENG_ENPUNCT) == BST_CHECKED;
             s->enterClears   = IsDlgButtonChecked(h, IDC_ENTER_CLEARS) == BST_CHECKED;
             wchar_t buf[8] = {0};
             GetDlgItemTextW(h, IDC_CAND_COMBO, buf, 8);

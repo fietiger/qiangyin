@@ -12,7 +12,9 @@ struct Settings {
     bool alwaysChinese = false;  // 切换到强音时总是中文模式（默认记住上次）
     bool chinesePunct = true;    // 中文模式下标点转全角
     bool fullShape = false;      // 全角模式（字母/数字/空格输出全角，Shift+空格 切换）
-    int  candidateCount = 10;    // 候选数量（5/10）
+    bool engAutoHalfWidth = true;  // 切到英文模式时自动回半角（全角英文不好打）
+    bool engAutoEnPunct = false;   // 切到英文模式时同时关掉中文标点
+    int  candidateCount = 10;    // 候选数量（5..10）
 
     void Load();          // 读注册表，缺失/非法值回落默认
     bool Save() const;    // 写回注册表

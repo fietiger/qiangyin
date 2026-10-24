@@ -65,6 +65,11 @@ bool KeyHandler::HasCtrlAlt() const {
 return (GetKeyState(VK_CONTROL) & 0x8000) || (GetKeyState(VK_MENU) & 0x8000);
 }
 
+bool KeyHandler::CtrlOnly() const {
+return (GetKeyState(VK_CONTROL) & 0x8000) && !(GetKeyState(VK_MENU) & 0x8000) &&
+       !shiftDown_ && !((GetKeyState(VK_SHIFT) & 0x8000));
+}
+
 std::vector<Candidate> KeyHandler::QueryCandidates() const {
 if (query_ &&!buffer_.empty()) return query_(buffer_, queryCtx_);
 return {};
@@ -90,6 +95,15 @@ void KeyHandler::SetChineseMode(bool chinese) {
         CommitTopCandidate();
     }
     chinese_ = chinese;
+    if (!chinese_) {
+        // 可选：切到英文时自动收拾全角/中文标点状态（全角英文不好打）
+        if (EngAutoHalfWidth() && fullShape_) {
+            fullShape_ = false;
+            host_->OnFullShapeChanged(false);
+        }
+        if (EngAutoEnPunct() && ChinesePunct())
+            host_->OnPunctChanged(false);
+    }
     host_->OnModeChanged(chinese_);
 }
 
@@ -133,6 +147,9 @@ return false;
 }
 
 bool KeyHandler::WouldEatKey(UINT vkey, LPARAM /*lParam*/) const {
+	if (vkey == VK_OEM_PERIOD && CtrlOnly())
+	return true; // Ctrl+.：切换中文/英文标点（经典 IME 快捷键）
+
 	if (HasCtrlAlt()) return false; // 快捷键一律放行
 
 	if (vkey == VK_SHIFT || vkey == VK_LSHIFT || vkey == VK_RSHIFT)
@@ -172,6 +189,13 @@ if (!shiftDown_) { shiftDown_ = true; shiftUsed_ = false;}
 return true; // 吃掉，等 KeyUp 再决定是否切换
 }
 	if (shiftDown_) shiftUsed_ = true; // Shift 按住期间有其他键：不是点按
+
+	// Ctrl+.：切换中文/英文标点（经典 IME 快捷键，组字中也不受影响）
+	if (vkey == VK_OEM_PERIOD && CtrlOnly()) {
+	host_->OnPunctChanged(!ChinesePunct());
+	return true;
+	}
+
 	if (HasCtrlAlt()) return false;
 
 	// Shift+空格：切换全/半角（组字中不切，空格仍按选字上屏处理）

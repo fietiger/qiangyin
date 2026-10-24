@@ -19,6 +19,8 @@ void Settings::Load() {
     alwaysChinese  = ReadDword(L"AlwaysChinese", 0) != 0;
     chinesePunct   = ReadDword(L"ChinesePunct", 1) != 0;
     fullShape      = ReadDword(L"FullShape", 0) != 0;
+    engAutoHalfWidth = ReadDword(L"EngAutoHalfWidth", 1) != 0;
+    engAutoEnPunct   = ReadDword(L"EngAutoEnPunct", 0) != 0;
     DWORD c = ReadDword(L"CandidateCount", 10);
     candidateCount = (c >= 5 && c <= 10) ? (int)c : 10; // 选字键最多 0=第10，候选上限 10
 }
@@ -35,6 +37,8 @@ bool Settings::Save() const {
         {L"AlwaysChinese",  alwaysChinese ? 1u : 0u},
         {L"ChinesePunct",   chinesePunct ? 1u : 0u},
         {L"FullShape",      fullShape ? 1u : 0u},
+        {L"EngAutoHalfWidth", engAutoHalfWidth ? 1u : 0u},
+        {L"EngAutoEnPunct",   engAutoEnPunct ? 1u : 0u},
         {L"CandidateCount", static_cast<DWORD>(candidateCount)},
     };
     for (const auto& kv : vals)

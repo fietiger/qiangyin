@@ -540,9 +540,16 @@ void CQiangYinTextService::OnFullShapeChanged(bool full) {
     qy::log::Write(b);
 }
 
-void CQiangYinTextService::OnLangBarTogglePunct() {
-    settings_.chinesePunct = !settings_.chinesePunct;
+void CQiangYinTextService::OnPunctChanged(bool chinesePunct) {
+    settings_.chinesePunct = chinesePunct;
     settings_.Save();
+    wchar_t b[64];
+    wsprintfW(b, L"punct=%d saved", chinesePunct ? 1 : 0);
+    qy::log::Write(b);
+}
+
+void CQiangYinTextService::OnLangBarTogglePunct() {
+    OnPunctChanged(!settings_.chinesePunct);
 }
 
 void CQiangYinTextService::OnLangBarToggleFullShape() {

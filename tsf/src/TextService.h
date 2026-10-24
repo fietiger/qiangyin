@@ -69,6 +69,7 @@ public:
     void OnCancelComposition() override;
     void OnModeChanged(bool chinese) override;
     void OnFullShapeChanged(bool full) override; // Shift+空格切换全/半角
+    void OnPunctChanged(bool chinesePunct) override; // Ctrl+. 切标点
 
     // ILangBarHost（任务栏中/英图标交互）
     void OnLangBarToggleMode() override;
