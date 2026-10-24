@@ -15,7 +15,13 @@ static DWORD ReadDword(const wchar_t* name, DWORD def) {
 void Settings::Load() {
     showHint       = ReadDword(L"ShowHint", 1) != 0;
     autoCommitFull = ReadDword(L"AutoCommitFull", 1) != 0;
-    enterClears    = ReadDword(L"EnterClears", 1) != 0;
+    { // EnterMode：0=清除 1=上屏首选 2=编码上屏；兼容旧版 EnterClears
+      DWORD m = ReadDword(L"EnterMode", 0xFFFFFFFF);
+      if (m == 0xFFFFFFFF)
+          m = ReadDword(L"EnterClears", 1) != 0 ? 0 : 1;
+      enterMode = (m <= 2) ? (int)m : 0;
+    }
+    switchClears   = ReadDword(L"SwitchClears", 1) != 0;
     alwaysChinese  = ReadDword(L"AlwaysChinese", 0) != 0;
     chinesePunct   = ReadDword(L"ChinesePunct", 1) != 0;
     fullShape      = ReadDword(L"FullShape", 0) != 0;
@@ -33,7 +39,8 @@ bool Settings::Save() const {
     struct { const wchar_t* name; DWORD v; } vals[] = {
         {L"ShowHint",       showHint ? 1u : 0u},
         {L"AutoCommitFull", autoCommitFull ? 1u : 0u},
-        {L"EnterClears",    enterClears ? 1u : 0u},
+        {L"EnterMode",      static_cast<DWORD>(enterMode)},
+        {L"SwitchClears",   switchClears ? 1u : 0u},
         {L"AlwaysChinese",  alwaysChinese ? 1u : 0u},
         {L"ChinesePunct",   chinesePunct ? 1u : 0u},
         {L"FullShape",      fullShape ? 1u : 0u},

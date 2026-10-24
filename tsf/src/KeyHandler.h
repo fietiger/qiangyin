@@ -76,7 +76,8 @@ private:
 
     // 设置读取（空指针回落默认，保持可单测）
     bool AutoCommitFull() const { return !settings_ || settings_->autoCommitFull; }
-    bool EnterClears() const { return !settings_ || settings_->enterClears; }
+    int  EnterMode() const { return settings_ ? settings_->enterMode : 0; } // 0清除/1首选/2编码
+    bool SwitchClears() const { return !settings_ || settings_->switchClears; }
     bool ChinesePunct() const { return !settings_ || settings_->chinesePunct; }
     bool EngAutoHalfWidth() const { return !settings_ || settings_->engAutoHalfWidth; }
     bool EngAutoEnPunct() const { return !settings_ || settings_->engAutoEnPunct; }

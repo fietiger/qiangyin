@@ -133,8 +133,15 @@ void KeyHandler::ToggleMode() {
 void KeyHandler::SetChineseMode(bool chinese) {
     if (chinese == chinese_) return;
     if (composing()) {
-        // 切换前先把组字上屏，避免中英文切换丢组字——这正是原 bug 的场景
-        CommitTopCandidate();
+        // 切换时组字怎么处理：清空（默认，直接切）或上屏首选（原版风格）
+        if (SwitchClears()) {
+            buffer_.clear();
+            page_ = 0;
+            host_->OnCancelComposition();
+        } else {
+            // 切换前先把组字上屏，避免中英文切换丢组字——这正是原 bug 的场景
+            CommitTopCandidate();
+        }
     }
     chinese_ = chinese;
     if (!chinese_) {
@@ -326,13 +333,21 @@ return true;
 
 	if (vkey == VK_RETURN) {
 	if (!composing()) return false;
-	// 可配置：Enter=清除输入（默认，原版配置）或上屏首选
-	if (!EnterClears()) {
+	// 可配置：0=清除输入（原版默认）1=上屏首选 2=编码上屏（想要英文字母直接回车）
+	switch (EnterMode()) {
+	case 1:
 		CommitTopCandidate();
-	} else {
+		break;
+	case 2:
+		host_->OnCommitText(buffer_); // 已敲的编码字母原样上屏
+		buffer_.clear();
+		page_ = 0;
+		break;
+	default:
 		buffer_.clear();
 		page_ = 0;
 		host_->OnCancelComposition();
+		break;
 	}
 	return true;
 	}

@@ -18,3 +18,7 @@
 #define IDC_AW_WORD        1101
 #define IDC_AW_CODE        1102
 #define IDC_AW_CLIP        1103
+
+// Enter 行为第三选项 / 切换时清空
+#define IDC_ENTER_CODE     1011
+#define IDC_SWITCH_CLEAR   1012

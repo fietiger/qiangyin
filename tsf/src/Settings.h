@@ -8,7 +8,8 @@ namespace qy {
 struct Settings {
     bool showHint = true;        // 候选窗编码提示
     bool autoCommitFull = true;  // 组字满 4 码且唯一候选时自动上屏
-    bool enterClears = true;     // Enter=清除输入；false=上屏首选
+    int  enterMode = 0;          // Enter 行为：0=清除输入(原版默认) 1=上屏首选 2=编码上屏
+    bool switchClears = true;    // 切换中/英时清空组字（否则上屏首选）
     bool alwaysChinese = false;  // 切换到强音时总是中文模式（默认记住上次）
     bool chinesePunct = true;    // 中文模式下标点转全角
     bool fullShape = false;      // 全角模式（字母/数字/空格输出全角，Shift+空格 切换）
