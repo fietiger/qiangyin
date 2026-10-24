@@ -42,8 +42,17 @@ static std::map<wchar_t, std::string> LoadCharCodes(const std::wstring& mbPath,
                 if (ok) {
                     std::wstring ch = Utf8ToWide(data.substr(textBegin, 3));
                     if (ch.size() == 1 && word.find(ch[0]) != std::wstring::npos) {
+                        // 同字多编码时的取舍：i 开头是“不知读音”的救急码
+                        // （拼音声母无 i，如 了=lm/救急 im），正常声母码优先；
+                        // 同优先级取更长（全码），只有救急码时才落到救急码。
                         std::string& best = out[ch[0]];
-                        if (code.size() > best.size()) best = code;
+                        bool bestIsI = !best.empty() && best[0] == 'i';
+                        bool codeIsI = code[0] == 'i';
+                        if (best.empty() ||
+                            (bestIsI && !codeIsI) ||
+                            (bestIsI == codeIsI && code.size() > best.size())) {
+                            best = code;
+                        }
                     }
                 }
             }
