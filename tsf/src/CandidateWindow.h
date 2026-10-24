@@ -32,6 +32,7 @@ private:
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
     void OnPaint();
     void RecalcSize();
+    void UpdateTheme(); // 跟随 Windows 深浅色（每次显示/更新时读一次注册表）
 
     HWND hwnd_ = nullptr;
     HFONT font_ = nullptr;
@@ -42,6 +43,7 @@ private:
     int width_ = 120;
     int numW_ = 24; // 序号 "N. " 列宽
     int pageW_ = 0; // 页码 "n/m" 宽度
+    bool dark_ = false;   // 系统深色模式（Win11 Dark 配色）
 };
 
 } // namespace qy
