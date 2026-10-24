@@ -1,4 +1,8 @@
-// 强音输入法资源：图标 + 设置对话框
+﻿// 强音输入法资源：图标 + 设置对话框
+// 本文件是 UTF-8（带 BOM）。rc.exe 默认按系统代码页解析 .rc，
+// 在英文 CI（CP1252）上中文会变乱码——code_page(65001) 强制按 UTF-8 读，
+// 与系统代码页无关。
+#pragma code_page(65001)
 #include <windows.h>
 #include "src/resids.h"
 
