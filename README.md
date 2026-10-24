@@ -38,6 +38,12 @@ push 到 master 后，GitHub Actions 自动编译：
 仓库页面 → Actions → 最新 run → Artifacts → 下载 `qiangyin-windows-x64`，
 里面就是 `qiangyin.dll`。配合 `ffi/qiangyin.h` 和 `data/` 码表给 C++ 用。
 
+## 安装包
+
+- **正式版**：[Releases](../../releases) 下载 `QiangYin-Setup.exe`（永久地址，无需登录）
+- 开发版：Actions → 最新 run → Artifacts → `qiangyin-setup-windows-x64`（需登录 GitHub，90 天过期）
+- 发布：打 `v*` tag 并 push 即自动构建并发布 Release
+
 ## Engine API（Rust）
 
 ```rust
