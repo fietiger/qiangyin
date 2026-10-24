@@ -8,6 +8,7 @@
 #include "QyLog.h"
 #include "Utf.h"
 #include "SettingsDialog.h"
+#include <shellapi.h> // ShellExecuteW
 #include <assert.h>
 
 namespace qy {
@@ -557,6 +558,18 @@ bool CQiangYinTextService::LangBarIsChinesePunct() const {
 
 bool CQiangYinTextService::LangBarIsFullShape() const {
     return _keyHandler.full_shape();
+}
+
+// 右键菜单：打开用户词库（没有就创建带说明的模板），保存后输入法自动热重载
+void CQiangYinTextService::OnLangBarOpenUserDict() {
+    if (!Engine::EnsureUserTable()) { QYLOG("open user dict: ensure failed"); return; }
+    std::wstring path = Engine::UserTablePath();
+    HINSTANCE h = ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr,
+                                SW_SHOWNORMAL);
+    wchar_t b[128];
+    wsprintfW(b, L"open user dict: %s (hInst>32=%d)", path.c_str(),
+              (int)(reinterpret_cast<INT_PTR>(h) > 32));
+    qy::log::Write(b);
 }
 
 // 任务栏图标右键菜单 → 设置对话框（模态，运行在前台应用进程里）

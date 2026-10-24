@@ -75,6 +75,7 @@ public:
     void OnLangBarOpenSettings() override;
     void OnLangBarTogglePunct() override;        // 右键菜单：中文标点
     void OnLangBarToggleFullShape() override;    // 右键菜单：全角模式
+    void OnLangBarOpenUserDict() override;       // 右键菜单：打开用户词库
     bool LangBarIsChinesePunct() const override;
     bool LangBarIsFullShape() const override;
 

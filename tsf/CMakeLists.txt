@@ -34,7 +34,7 @@ set_target_properties(qiangyin_ime PROPERTIES
     SUFFIX ".dll"
 )
 
-target_link_libraries(qiangyin_ime PRIVATE ole32 oleaut32 uuid gdi32 advapi32)
+target_link_libraries(qiangyin_ime PRIVATE ole32 oleaut32 uuid gdi32 advapi32 shell32)
 
 # 整个代码库都用显式 W 后缀 API；定义 UNICODE 让宏（SNDMSG/DefWindowProc 等）
 # 也走 W 版本。不定义的话 ComboBox_AddString 会展开成 SendMessageA，

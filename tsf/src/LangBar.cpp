@@ -164,6 +164,7 @@ STDMETHODIMP CQiangYinLangBarItem::GetTooltipString(BSTR* pbstrToolTip) {
 static const UINT kMenuIdSettings  = 100;
 static const UINT kMenuIdPunct     = 101;
 static const UINT kMenuIdFullShape = 102;
+static const UINT kMenuIdUserDict  = 103;
 
 STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const RECT*) {
     if (click == TF_LBI_CLK_LEFT) {
@@ -178,6 +179,7 @@ STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const REC
                     MF_STRING | (_host->LangBarIsFullShape() ? MF_CHECKED : 0),
                     kMenuIdFullShape, L"全角模式(&F)");
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(menu, MF_STRING, kMenuIdUserDict, L"打开用户词库(&U)...");
         AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"设置(&S)...");
         HWND owner = GetFocus();
         if (!owner) owner = GetForegroundWindow();
@@ -188,6 +190,7 @@ STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const REC
             switch (cmd) {
             case kMenuIdPunct:     _host->OnLangBarTogglePunct(); break;
             case kMenuIdFullShape: _host->OnLangBarToggleFullShape(); break;
+            case kMenuIdUserDict:  _host->OnLangBarOpenUserDict(); break;
             case kMenuIdSettings:  _host->OnLangBarOpenSettings(); break;
             default: break;
             }
@@ -206,6 +209,8 @@ STDMETHODIMP CQiangYinLangBarItem::InitMenu(ITfMenu* pMenu) {
         pMenu->AddMenuItem(kMenuIdFullShape,
                            _host->LangBarIsFullShape() ? TF_LBMENUF_CHECKED : 0,
                            nullptr, nullptr, L"全角模式", 4, nullptr);
+        pMenu->AddMenuItem(kMenuIdUserDict, 0, nullptr, nullptr,
+                           L"打开用户词库", 6, nullptr);
         pMenu->AddMenuItem(kMenuIdSettings, 0, nullptr, nullptr,
                            L"设置(&S)...", 7, nullptr);
     }
@@ -217,6 +222,7 @@ STDMETHODIMP CQiangYinLangBarItem::OnMenuSelect(UINT wID) {
     switch (wID) {
     case kMenuIdPunct:     _host->OnLangBarTogglePunct(); break;
     case kMenuIdFullShape: _host->OnLangBarToggleFullShape(); break;
+    case kMenuIdUserDict:  _host->OnLangBarOpenUserDict(); break;
     case kMenuIdSettings:  _host->OnLangBarOpenSettings(); break;
     default: break;
     }
