@@ -10,10 +10,14 @@ namespace qy {
 
 // ---- 编码自动计算 ----
 
-// 从系统码表反查每个字的全码（该字最长的那条单字编码）
-static std::map<wchar_t, std::string> LoadCharCodes(const std::wstring& mbPath,
-                                                    const std::wstring& word) {
-    std::map<wchar_t, std::string> out;
+// 每字在码表里的编码信息：选中码 + 出现过的非 i 声母集合（多音字检测）
+struct CharCodes {
+    std::map<wchar_t, std::string> best;      // 选中的编码（非 i 优先、取最长）
+    std::map<wchar_t, std::wstring> initials; // 见过的声母字母，如 "cz"（重=chóng/zhòng）
+};
+
+static CharCodes LoadCharCodes(const std::wstring& mbPath, const std::wstring& word) {
+    CharCodes out;
     HANDLE h = CreateFileW(mbPath.c_str(), GENERIC_READ,
                            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
                            OPEN_EXISTING, 0, nullptr);
@@ -42,16 +46,23 @@ static std::map<wchar_t, std::string> LoadCharCodes(const std::wstring& mbPath,
                 if (ok) {
                     std::wstring ch = Utf8ToWide(data.substr(textBegin, 3));
                     if (ch.size() == 1 && word.find(ch[0]) != std::wstring::npos) {
-                        // 同字多编码时的取舍：i 开头是“不知读音”的救急码
+                        // 同字多编码取舍：i 开头是“不知读音”的救急码
                         // （拼音声母无 i，如 了=lm/救急 im），正常声母码优先；
                         // 同优先级取更长（全码），只有救急码时才落到救急码。
-                        std::string& best = out[ch[0]];
+                        std::string& best = out.best[ch[0]];
                         bool bestIsI = !best.empty() && best[0] == 'i';
                         bool codeIsI = code[0] == 'i';
                         if (best.empty() ||
                             (bestIsI && !codeIsI) ||
                             (bestIsI == codeIsI && code.size() > best.size())) {
                             best = code;
+                        }
+                        // 记录声母（去重），供多音字告警
+                        if (!codeIsI) {
+                            std::wstring& inis = out.initials[ch[0]];
+                            wchar_t ini = (wchar_t)code[0];
+                            if (inis.find(ini) == std::wstring::npos)
+                                inis += ini;
                         }
                     }
                 }
@@ -62,12 +73,30 @@ static std::map<wchar_t, std::string> LoadCharCodes(const std::wstring& mbPath,
     return out;
 }
 
-std::wstring ComputeWordCode(const std::wstring& mbPath, const std::wstring& word) {
+std::wstring ComputeWordCode(const std::wstring& mbPath, const std::wstring& word,
+                             std::wstring* warnOut) {
     if (word.empty() || mbPath.empty()) return std::wstring();
-    auto codes = LoadCharCodes(mbPath, word);
+    CharCodes codes = LoadCharCodes(mbPath, word);
+    if (warnOut) {
+        warnOut->clear();
+        for (wchar_t c : word) {
+            auto it = codes.initials.find(c);
+            if (it != codes.initials.end() && it->second.size() >= 2) {
+                // 重(c/z)：多个不同声母 → 多音字，自动取码可能不合本意
+                if (!warnOut->empty()) *warnOut += L" ";
+                *warnOut += c;
+                *warnOut += L"(";
+                for (size_t k = 0; k < it->second.size(); ++k) {
+                    if (k) *warnOut += L"/";
+                    *warnOut += it->second[k];
+                }
+                *warnOut += L")";
+            }
+        }
+    }
     auto head = [&codes, &word](size_t i, size_t n) -> std::string {
-        auto it = codes.find(word[i]);
-        if (it == codes.end()) return std::string();
+        auto it = codes.best.find(word[i]);
+        if (it == codes.best.end()) return std::string();
         return it->second.substr(0, n);
     };
     std::string code;
@@ -112,8 +141,13 @@ std::wstring RecentWord(const AddWordContext& ctx, size_t len) {
 
 void Refill(HWND h, AddWordState& st, const std::wstring& word) {
     SetDlgItemTextW(h, IDC_AW_WORD, word.c_str());
+    std::wstring warn;
     SetDlgItemTextW(h, IDC_AW_CODE,
-                    ComputeWordCode(st.ctx->mbPath, word).c_str());
+                    ComputeWordCode(st.ctx->mbPath, word, &warn).c_str());
+    std::wstring warnText;
+    if (!warn.empty())
+        warnText = L"多音字，请确认编码：" + warn;
+    SetDlgItemTextW(h, IDC_AW_WARN, warnText.c_str());
 }
 
 std::wstring GetClipboardText() {
@@ -138,6 +172,15 @@ std::wstring GetClipboardText() {
 INT_PTR CALLBACK AddWordDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     AddWordState* st = reinterpret_cast<AddWordState*>(
         GetWindowLongPtrW(h, GWLP_USERDATA));
+    // 多音字告警行用红字
+    if (msg == WM_CTLCOLORSTATIC && (HWND)lp == GetDlgItem(h, IDC_AW_WARN)) {
+        static HBRUSH s_brush = nullptr;
+        if (!s_brush) s_brush = CreateSolidBrush(RGB(0xFF, 0xFF, 0xFF));
+        HDC hdc = (HDC)wp;
+        SetBkMode(hdc, TRANSPARENT);
+        SetTextColor(hdc, RGB(0xC0, 0x30, 0x30));
+        return (INT_PTR)s_brush;
+    }
     switch (msg) {
     case WM_INITDIALOG: {
         st = reinterpret_cast<AddWordState*>(lp);
@@ -165,11 +208,16 @@ INT_PTR CALLBACK AddWordDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                 std::wstring clip = GetClipboardText();
                 if (!clip.empty())
                     SetDlgItemTextW(h, IDC_AW_WORD, clip.c_str());
-                // 按当前词条框内容重算编码
+                // 按当前词条框内容重算编码（含多音字告警）
                 wchar_t wbuf[128] = {0};
                 GetDlgItemTextW(h, IDC_AW_WORD, wbuf, 128);
+                std::wstring warn;
                 SetDlgItemTextW(h, IDC_AW_CODE,
-                                ComputeWordCode(st->ctx->mbPath, wbuf).c_str());
+                                ComputeWordCode(st->ctx->mbPath, wbuf, &warn).c_str());
+                std::wstring warnText;
+                if (!warn.empty())
+                    warnText = L"多音字，请确认编码：" + warn;
+                SetDlgItemTextW(h, IDC_AW_WARN, warnText.c_str());
             } else {
                 // 取消剪贴板：回到最近输入模式
                 Refill(h, *st, RecentWord(*st->ctx, st->wordLen));

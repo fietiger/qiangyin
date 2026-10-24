@@ -13,8 +13,11 @@ struct AddWordContext {
 };
 
 // 按超强音形词组规则计算编码（二字=每字前两码；三字=首字前两码+后两字首码；
-// 四字=各字首码；多字=前三字+末字首码）。单字编码取码表里该字最长的条目（全码）。
-std::wstring ComputeWordCode(const std::wstring& mbPath, const std::wstring& word);
+// 四字=各字首码；多字=前三字+末字首码）。单字编码取码表里该字最长的非 i
+// 开头条目（i 为救急码）；同字存在多个不同声母编码（多音字）时，
+// warnOut（可空）返回提示文本（如 L"重(c/z) 行(h/x)"），请用户确认。
+std::wstring ComputeWordCode(const std::wstring& mbPath, const std::wstring& word,
+                             std::wstring* warnOut = nullptr);
 
 // 模态对话框。返回 true=确定（outWord/outCode 为确认值）。
 bool ShowAddWordDialog(HWND owner, AddWordContext& ctx,

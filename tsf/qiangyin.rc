@@ -36,7 +36,7 @@ BEGIN
 END
 
 // 在线加词对话框（Ctrl+'+' 呼出，对齐原版超强音形）
-IDD_ADDWORD DIALOGEX 0, 0, 244, 92
+IDD_ADDWORD DIALOGEX 0, 0, 244, 100
 STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "在线加词 - 强音输入法"
 FONT 9, "Microsoft YaHei UI", 400, 0, 0x1
@@ -46,7 +46,8 @@ BEGIN
     LTEXT           "编码(&C)：", -1, 10, 33, 40, 8
     EDITTEXT        IDC_AW_CODE, 54, 30, 118, 14, ES_AUTOHSCROLL
     AUTOCHECKBOX    "使用剪贴板造词(&P)", IDC_AW_CLIP, 54, 52, 120, 10
-    LTEXT           "可用 ↑、↓ 更改词长；同码时用户词排在系统词前", -1, 54, 66, 180, 8
+    LTEXT           "", IDC_AW_WARN, 54, 66, 180, 8
+    LTEXT           "可用 ↑、↓ 更改词长；同码时用户词排在系统词前", -1, 54, 80, 180, 8
     DEFPUSHBUTTON   "确定", IDOK, 186, 10, 45, 14
     PUSHBUTTON      "取消", IDCANCEL, 186, 28, 45, 14
 END

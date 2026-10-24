@@ -18,6 +18,7 @@
 #define IDC_AW_WORD        1101
 #define IDC_AW_CODE        1102
 #define IDC_AW_CLIP        1103
+#define IDC_AW_WARN        1104
 
 // Enter 行为 / 切换中英行为（各三选一）
 #define IDC_ENTER_CODE     1011
