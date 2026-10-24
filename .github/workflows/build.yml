@@ -103,19 +103,23 @@ jobs:
           if (!(Test-Path $nsis)) { $nsis = "$env:ProgramFiles\NSIS\makensis.exe" }
           Write-Host "NSIS: $nsis"
           if (!(Test-Path $nsis)) { Write-Host "::error::makensis not found"; exit 1 }
-          & $nsis installer/qiangyin.nsi 2>&1 | Tee-Object -FilePath nsis.log
+          # 安装包文件名带版本：tag 构建用 tag 名（vX.Y.Z），master 构建用 dev-<短SHA>
+          $ref = "${{ github.ref_name }}"
+          if ($ref -like "v*") { $ver = $ref } else { $ver = "dev-" + "${{ github.sha }}".Substring(0, 7) }
+          Write-Host "version: $ver"
+          & $nsis "/DVERSION=$ver" installer/qiangyin.nsi 2>&1 | Tee-Object -FilePath nsis.log
           if ($LASTEXITCODE -ne 0) {
             foreach ($line in (Get-Content nsis.log)) {
               if ($line -match '[Ee]rror') { Write-Host ("::error::" + $line) }
             }
             exit 1
           }
-          Get-ChildItem QiangYin-Setup.exe
+          Get-ChildItem "QiangYin-Setup-*.exe"
       - name: upload installer
         uses: actions/upload-artifact@v4
         with:
           name: qiangyin-setup-windows-x64
-          path: QiangYin-Setup.exe
+          path: QiangYin-Setup-*.exe
 
   release:
     # 打 v* tag 时：安装包发布为 GitHub Release（永久下载地址，无需登录）
@@ -136,4 +140,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $tag = "${{ github.ref_name }}"
-          gh release create $tag --title "强音输入法 $tag" --generate-notes QiangYin-Setup.exe
+          $exe = (Get-ChildItem "QiangYin-Setup-*.exe" | Select-Object -First 1).Name
+          Write-Host "asset: $exe"
+          gh release create $tag --title "强音输入法 $tag" --generate-notes $exe

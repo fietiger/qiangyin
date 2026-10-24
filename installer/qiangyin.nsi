@@ -6,8 +6,14 @@
 !include "MUI2.nsh"
 !include "x64.nsh"
 
+; 版本号由 CI 用 /DVERSION=vX.Y.Z 注入（见 .github/workflows/build.yml）；
+; 手动 makensis 时不带则落到 dev
+!ifndef VERSION
+  !define VERSION "dev"
+!endif
+
 Name "强音输入法"
-OutFile "..\QiangYin-Setup.exe"
+OutFile "..\QiangYin-Setup-${VERSION}.exe"
 InstallDir "$PROGRAMFILES64\QiangYin"
 RequestExecutionLevel admin
 Unicode true
@@ -70,6 +76,8 @@ Section "强音输入法" SecMain
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\QiangYin" \
     "DisplayName" "强音输入法"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\QiangYin" \
+    "DisplayVersion" "${VERSION}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\QiangYin" \
     "UninstallString" "$INSTDIR\Uninstall.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\QiangYin" \

@@ -40,8 +40,8 @@ push 到 master 后，GitHub Actions 自动编译：
 
 ## 安装包
 
-- **正式版**：[Releases](../../releases) 下载 `QiangYin-Setup.exe`（永久地址，无需登录）
-- 开发版：Actions → 最新 run → Artifacts → `qiangyin-setup-windows-x64`（需登录 GitHub，90 天过期）
+- **正式版**：[Releases](../../releases) 下载 `QiangYin-Setup-vX.Y.Z.exe`（文件名带版本号，永久地址，无需登录）
+- 开发版：Actions → 最新 run → Artifacts → `qiangyin-setup-windows-x64`（文件名带 `dev-<短SHA>`；需登录 GitHub，90 天过期）
 - 发布：打 `v*` tag 并 push 即自动构建并发布 Release
 
 ## Engine API（Rust）
