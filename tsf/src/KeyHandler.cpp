@@ -15,9 +15,10 @@ std::string ToUtf8(unsigned cp) {
 }
 
 // 全角块 U+FF01..U+FF5E 与 ASCII 0x21..0x7E 一一对应；空格单独映射 U+3000
+// 注意基址是 0xFEE0（'!'0x21→FF01），写成 0xFF00 会错进半角片假名块（ｱｹ）
 std::string FullWidthAscii(char c) {
 	if (c == ' ') return ToUtf8(0x3000);
-	if (c >= 0x21 && c <= 0x7E) return ToUtf8(0xFF00 + static_cast<unsigned char>(c));
+	if (c >= 0x21 && c <= 0x7E) return ToUtf8(0xFEE0 + static_cast<unsigned char>(c));
 	return std::string();
 }
 
