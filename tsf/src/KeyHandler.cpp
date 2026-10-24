@@ -253,6 +253,25 @@ bool KeyHandler::WouldEatKey(UINT vkey, LPARAM /*lParam*/) const {
 	return false;
 }
 
+// 组字被打断时按 Enter 行为三态收尾：0=清空 1=首选上屏 2=编码上屏
+void KeyHandler::FlushCompositionEnterLike() {
+	switch (EnterMode()) {
+	case 1:
+	CommitTopCandidate();
+	break;
+	case 2:
+	host_->OnCommitText(buffer_);
+	buffer_.clear();
+	page_ = 0;
+	break;
+	default:
+	buffer_.clear();
+	page_ = 0;
+	host_->OnCancelComposition();
+	break;
+	}
+}
+
 bool KeyHandler::HandleKeyDown(UINT vkey, LPARAM lParam) {
 if (vkey == VK_SHIFT || vkey == VK_LSHIFT || vkey == VK_RSHIFT) {
 if (!shiftDown_) { shiftDown_ = true; shiftUsed_ = false;}
@@ -300,6 +319,13 @@ return true; // 吃掉，等 KeyUp 再决定是否切换
 	}
 
 	if (vkey >= 'A' && vkey <= 'Z') {
+	// 大写字母（Shift+字母）必输出英文：不进组字直接上屏；
+	// 组字中则先按 Enter 三态收尾。CapsLock 不算（保持简单）
+	if (shiftDown_ || (GetKeyState(VK_SHIFT) & 0x8000)) {
+		if (composing()) FlushCompositionEnterLike();
+		host_->OnCommitText(std::string(1, (char)vkey));
+		return true;
+	}
 	bool start = buffer_.empty();
 	page_ = 0; // 新码开始，回到第一页
 	buffer_ += static_cast<char>(vkey - 'A' + 'a');
@@ -342,21 +368,7 @@ return true;
 	if (vkey == VK_RETURN) {
 	if (!composing()) return false;
 	// 可配置：0=清除输入（原版默认）1=上屏首选 2=编码上屏（想要英文字母直接回车）
-	switch (EnterMode()) {
-	case 1:
-		CommitTopCandidate();
-		break;
-	case 2:
-		host_->OnCommitText(buffer_); // 已敲的编码字母原样上屏
-		buffer_.clear();
-		page_ = 0;
-		break;
-	default:
-		buffer_.clear();
-		page_ = 0;
-		host_->OnCancelComposition();
-		break;
-	}
+	FlushCompositionEnterLike();
 	return true;
 	}
 

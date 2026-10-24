@@ -72,6 +72,7 @@ private:
     bool IsPunctKey(UINT vkey, std::string& outUtf8) const;
     std::vector<Candidate> QueryCandidates() const;
     void CommitTopCandidate(); // 上屏首选（无候选则上屏 buffer 原样）
+    void FlushCompositionEnterLike(); // 组字被打断时按 Enter 三态收尾（大写直出等复用）
     void ToggleMode();
 
     // 设置读取（空指针回落默认，保持可单测）
