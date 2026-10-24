@@ -19,6 +19,7 @@ public:
     virtual void OnLangBarTogglePunct() = 0;         // 右键菜单：中文标点
     virtual void OnLangBarToggleFullShape() = 0;     // 右键菜单：全角模式
     virtual void OnLangBarOpenUserDict() = 0;        // 右键菜单：打开用户词库
+    virtual void OnLangBarAddWord() = 0;             // 右键菜单：造词
     virtual bool LangBarIsChinesePunct() const = 0;  // 菜单勾选状态
     virtual bool LangBarIsFullShape() const = 0;
 protected:

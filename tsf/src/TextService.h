@@ -70,6 +70,7 @@ public:
     void OnModeChanged(bool chinese) override;
     void OnFullShapeChanged(bool full) override; // Shift+空格切换全/半角
     void OnPunctChanged(bool chinesePunct) override; // Ctrl+. 切标点
+    void OnOpenAddWord() override;                    // Ctrl+'+' 在线造词
 
     // ILangBarHost（任务栏中/英图标交互）
     void OnLangBarToggleMode() override;
@@ -77,6 +78,7 @@ public:
     void OnLangBarTogglePunct() override;        // 右键菜单：中文标点
     void OnLangBarToggleFullShape() override;    // 右键菜单：全角模式
     void OnLangBarOpenUserDict() override;       // 右键菜单：打开用户词库
+    void OnLangBarAddWord() override;            // 右键菜单：造词
     bool LangBarIsChinesePunct() const override;
     bool LangBarIsFullShape() const override;
 
@@ -113,6 +115,7 @@ private:
     // 任务栏中/英指示（GUID_LBI_INPUTMODE 语言栏项，图标真正显示靠它）
     CQiangYinLangBarItem* _pLangBarItem = nullptr;
     Settings settings_; // 用户设置（Activate 时加载，KeyHandler 持有指针）
+    std::wstring recentCjk_; // 最近上屏的汉字（造词预填用，旧→新，≤16 字）
 TfGuidAtom _gaDisplayAttr = TF_INVALID_GUIDATOM;
 
     KeyHandler _keyHandler;

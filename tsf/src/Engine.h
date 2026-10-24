@@ -27,6 +27,9 @@ public:
     void Unload();
     bool IsLoaded() const { return dll_ != nullptr && engine_ != nullptr; }
 
+    // 在候选目录中找文件（造词对话框要反查系统码表，公开给外部用）
+    std::wstring FindFile(const std::wstring& name) const { return FindFileImpl(name); }
+
     // 前缀查询，返回候选（精确匹配优先，其余按码表顺序）。线程：调用线程。
     std::vector<Candidate> Query(const std::string& prefix, size_t limit = 9);
     size_t Count() const;
@@ -43,7 +46,7 @@ private:
     using FnFree = void (*)(QyEngine*);
 
     bool LoadFunctions();
-    std::wstring FindFile(const std::wstring& name) const; // 在候选目录中找文件
+    std::wstring FindFileImpl(const std::wstring& name) const; // 在候选目录中找文件
     void CheckUserTableChanged(); // Query 前调：用户词库 mtime 变了就整体重载
     static bool IsUtf8File(const std::wstring& path); // 防 UTF-16/GBK 文件拖垮整个引擎
     static unsigned long long FileMtime(const std::wstring& path); // 0=取不到

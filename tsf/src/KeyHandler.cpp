@@ -103,6 +103,10 @@ return (GetKeyState(VK_CONTROL) & 0x8000) && !(GetKeyState(VK_MENU) & 0x8000) &&
        !shiftDown_ && !((GetKeyState(VK_SHIFT) & 0x8000));
 }
 
+bool KeyHandler::CtrlHeld() const {
+return (GetKeyState(VK_CONTROL) & 0x8000) && !(GetKeyState(VK_MENU) & 0x8000);
+}
+
 std::vector<Candidate> KeyHandler::QueryCandidates() const {
 if (query_ &&!buffer_.empty()) return query_(buffer_, queryCtx_);
 return {};
@@ -188,6 +192,9 @@ bool KeyHandler::WouldEatKey(UINT vkey, LPARAM /*lParam*/) const {
 	if (vkey == VK_OEM_PERIOD && CtrlOnly())
 	return true; // Ctrl+.：切换中文/英文标点（经典 IME 快捷键）
 
+	if ((vkey == VK_OEM_PLUS || vkey == VK_ADD) && CtrlHeld())
+	return true; // Ctrl+'+'：在线造词（原版超强音形同款）
+
 	// 翻页键：-/= 与 ↑/↓（组字中；Shift/Ctrl/Alt 组合放行给应用）
 	{
 	bool noMod = !((GetKeyState(VK_SHIFT) | GetKeyState(VK_CONTROL) |
@@ -241,6 +248,12 @@ return true; // 吃掉，等 KeyUp 再决定是否切换
 	// Ctrl+.：切换中文/英文标点（经典 IME 快捷键，组字中也不受影响）
 	if (vkey == VK_OEM_PERIOD && CtrlOnly()) {
 	host_->OnPunctChanged(!ChinesePunct());
+	return true;
+	}
+
+	// Ctrl+'+'（主键区 = 或小键盘 +）：在线造词，弹对话框
+	if ((vkey == VK_OEM_PLUS || vkey == VK_ADD) && CtrlHeld()) {
+	host_->OnOpenAddWord();
 	return true;
 	}
 

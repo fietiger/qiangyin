@@ -26,6 +26,7 @@ public:
     virtual void OnModeChanged(bool chinese) = 0;
     virtual void OnFullShapeChanged(bool full) = 0;               // 全/半角切换（宿主负责持久化）
     virtual void OnPunctChanged(bool chinesePunct) = 0;           // Ctrl+. 切标点（宿主负责持久化）
+    virtual void OnOpenAddWord() = 0;                             // Ctrl+'+' 在线造词
 };
 
 class KeyHandler {
@@ -80,6 +81,7 @@ private:
     bool EngAutoHalfWidth() const { return !settings_ || settings_->engAutoHalfWidth; }
     bool EngAutoEnPunct() const { return !settings_ || settings_->engAutoEnPunct; }
     bool CtrlOnly() const; // 仅 Ctrl 按住（无 Shift/Alt）——Ctrl+. 切标点用
+    bool CtrlHeld() const; // Ctrl 按住（允许 Shift，无 Alt）——Ctrl+'+' 造词用
 
     IKeyHandlerHost* host_;
     const Settings* settings_ = nullptr;

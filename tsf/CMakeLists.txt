@@ -18,6 +18,7 @@ set(SRCS
     src/LangBar.cpp
     src/Settings.cpp
     src/SettingsDialog.cpp
+    src/AddWordDialog.cpp
     src/dllmain.cpp
     src/qiangyin_ime.def
     qiangyin.rc

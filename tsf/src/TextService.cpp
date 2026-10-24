@@ -8,6 +8,7 @@
 #include "QyLog.h"
 #include "Utf.h"
 #include "SettingsDialog.h"
+#include "AddWordDialog.h"
 #include <shellapi.h> // ShellExecuteW
 #include <assert.h>
 
@@ -504,6 +505,14 @@ void CQiangYinTextService::OnCompositionUpdated(const std::string& bufferUtf8) {
 }
 
 void CQiangYinTextService::OnCommitText(const std::string& textUtf8) {
+    // 记录最近上屏的汉字（在线造词预填；自动过滤标点/字母/数字）
+    for (wchar_t c : Utf8ToWide(textUtf8)) {
+        if (c >= 0x3400 && c <= 0x9FFF) { // CJK 扩展 A + 基本区
+            recentCjk_ += c;
+            if (recentCjk_.size() > 16)
+                recentCjk_.erase(0, recentCjk_.size() - 16);
+        }
+    }
     if (!_pContext || textUtf8.empty()) {
         HideCandidates();
         return;
@@ -578,6 +587,37 @@ void CQiangYinTextService::OnLangBarOpenUserDict() {
     wsprintfW(b, L"open user dict: %s (hInst>32=%d)", path.c_str(),
               (int)(reinterpret_cast<INT_PTR>(h) > 32));
     qy::log::Write(b);
+}
+
+// Ctrl+'+' / 右键菜单：在线造词。词条预填最近两字，编码按词组规则自动算，
+// 确定后追加进用户词库——文件 mtime 变化触发自动热重载，立即可用
+void CQiangYinTextService::OnOpenAddWord() {
+    AddWordContext ctx;
+    ctx.recent = recentCjk_;
+    ctx.mbPath = _engine.FindFile(L"mb.txt");
+    { wchar_t b[128]; wsprintfW(b, L"addword: recent=%u mb=%u",
+                                (unsigned)ctx.recent.size(),
+                                (unsigned)(ctx.mbPath.empty() ? 0 : 1));
+      qy::log::Write(b); }
+    std::wstring word, code;
+    if (!ShowAddWordDialog(GetFocus(), ctx, word, code)) return;
+
+    if (!Engine::EnsureUserTable()) { QYLOG("addword: ensure table failed"); return; }
+    std::wstring path = Engine::UserTablePath();
+    HANDLE h = CreateFileW(path.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ,
+                           nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) { QYLOG("addword: open table failed"); return; }
+    std::string line = qy::WideToUtf8(code) + " " + qy::WideToUtf8(word) + "\r\n";
+    DWORD written = 0;
+    BOOL ok = WriteFile(h, line.data(), (DWORD)line.size(), &written, nullptr);
+    CloseHandle(h);
+    { wchar_t b[128]; wsprintfW(b, L"addword ok=%d code=%s word=%s",
+                                (int)ok, code.c_str(), word.c_str());
+      qy::log::Write(b); }
+}
+
+void CQiangYinTextService::OnLangBarAddWord() {
+    OnOpenAddWord();
 }
 
 // 任务栏图标右键菜单 → 设置对话框（模态，运行在前台应用进程里）

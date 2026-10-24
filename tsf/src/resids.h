@@ -1,6 +1,7 @@
 #pragma once
-// 资源 ID：qiangyin.rc 与 SettingsDialog 共用（rc 里 #include "src/resids.h"）
+// 资源 ID：qiangyin.rc 与对话框代码共用（rc 里 #include "src/resids.h"）
 #define IDD_SETTINGS      101
+#define IDD_ADDWORD       102
 
 #define IDC_SHOW_HINT      1001
 #define IDC_AUTO_COMMIT    1002
@@ -12,3 +13,8 @@
 #define IDC_FULL_SHAPE     1008
 #define IDC_ENG_HALFWIDTH  1009
 #define IDC_ENG_ENPUNCT    1010
+
+// 在线加词（IDD_ADDWORD）
+#define IDC_AW_WORD        1101
+#define IDC_AW_CODE        1102
+#define IDC_AW_CLIP        1103

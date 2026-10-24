@@ -24,7 +24,7 @@ Engine::Engine() {
 
 Engine::~Engine() { Unload(); }
 
-std::wstring Engine::FindFile(const std::wstring& name) const {
+std::wstring Engine::FindFileImpl(const std::wstring& name) const {
     const std::wstring dirs[] = { moduleDir_, L".", };
     for (const auto& d : dirs) {
         if (d.empty()) continue;

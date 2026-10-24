@@ -165,6 +165,7 @@ static const UINT kMenuIdSettings  = 100;
 static const UINT kMenuIdPunct     = 101;
 static const UINT kMenuIdFullShape = 102;
 static const UINT kMenuIdUserDict  = 103;
+static const UINT kMenuIdAddWord   = 104;
 
 STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const RECT*) {
     if (click == TF_LBI_CLK_LEFT) {
@@ -181,6 +182,7 @@ STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const REC
                     kMenuIdFullShape, L"全角模式\tShift+空格");
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(menu, MF_STRING, kMenuIdUserDict, L"打开用户词库...");
+        AppendMenuW(menu, MF_STRING, kMenuIdAddWord, L"造词\tCtrl++");
         AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"设置...");
         HWND owner = GetFocus();
         if (!owner) owner = GetForegroundWindow();
@@ -192,6 +194,7 @@ STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const REC
             case kMenuIdPunct:     _host->OnLangBarTogglePunct(); break;
             case kMenuIdFullShape: _host->OnLangBarToggleFullShape(); break;
             case kMenuIdUserDict:  _host->OnLangBarOpenUserDict(); break;
+            case kMenuIdAddWord:   _host->OnLangBarAddWord(); break;
             case kMenuIdSettings:  _host->OnLangBarOpenSettings(); break;
             default: break;
             }
@@ -212,6 +215,8 @@ STDMETHODIMP CQiangYinLangBarItem::InitMenu(ITfMenu* pMenu) {
                            nullptr, nullptr, L"全角模式\tShift+空格", 12, nullptr);
         pMenu->AddMenuItem(kMenuIdUserDict, 0, nullptr, nullptr,
                            L"打开用户词库", 6, nullptr);
+        pMenu->AddMenuItem(kMenuIdAddWord, 0, nullptr, nullptr,
+                           L"造词\tCtrl++", 8, nullptr);
         pMenu->AddMenuItem(kMenuIdSettings, 0, nullptr, nullptr,
                            L"设置...", 4, nullptr);
     }
@@ -224,6 +229,7 @@ STDMETHODIMP CQiangYinLangBarItem::OnMenuSelect(UINT wID) {
     case kMenuIdPunct:     _host->OnLangBarTogglePunct(); break;
     case kMenuIdFullShape: _host->OnLangBarToggleFullShape(); break;
     case kMenuIdUserDict:  _host->OnLangBarOpenUserDict(); break;
+    case kMenuIdAddWord:   _host->OnLangBarAddWord(); break;
     case kMenuIdSettings:  _host->OnLangBarOpenSettings(); break;
     default: break;
     }
