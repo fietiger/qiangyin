@@ -56,6 +56,9 @@ public:
     // 中英状态变化：记住并通知任务栏重取图标
     void SetChineseMode(bool chinese);
 
+    // 主动通知任务栏重取图标/状态（激活/接入 sink 后调用，否则指示不显示）
+    void NotifyIconChanged();
+
 private:
     LONG _cRef;
     ILangBarHost* _host;      // 弱引用（属主是 TextService）
@@ -64,8 +67,6 @@ private:
     HICON _hIconEn = nullptr; // “英”
     ITfLangBarItemSink* _pSink = nullptr;
     DWORD _status = 0;
-
-    void NotifyIconChanged();
 };
 
 } // namespace qy

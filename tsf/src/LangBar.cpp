@@ -265,6 +265,9 @@ STDMETHODIMP CQiangYinLangBarItem::AdviseSink(REFIID riid, IUnknown* punk, DWORD
                                       reinterpret_cast<void**>(&_pSink));
     if (FAILED(hr)) return hr;
     *pdwCookie = kLangBarSinkCookie;
+    // 关键：系统接入通知通道的瞬间立刻发一次更新，任务栏才会渲染当前图标。
+    // 否则要等到第一次状态变化（如点 Shift）才显示——切 app 回来图标"消失"就是这个。
+    _pSink->OnUpdate(TF_LBI_ICON | TF_LBI_TEXT | TF_LBI_TOOLTIP | TF_LBI_STATUS);
     return S_OK;
 }
 
