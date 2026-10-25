@@ -67,8 +67,8 @@ private:
     HICON _hIconEn = nullptr; // “英”
     ITfLangBarItemSink* _pSink = nullptr;
     DWORD _status = 0;
-    HWND _pokeWnd = nullptr;  // message-only 窗口：延迟补发 OnUpdate 用
-    void EnsureDeferredPoke(); // 150ms 后再补一发（AdviseSink 内立即发可能因重入被丢）
+    HWND _pokeWnd = nullptr;  // message-only 窗口：异步补发 OnUpdate 用
+    void SchedulePoke();      // 安排一次延迟通知（构造期/AdviseSink 都安全调用）
     static LRESULT CALLBACK PokeWndProc(HWND, UINT, WPARAM, LPARAM);
 };
 

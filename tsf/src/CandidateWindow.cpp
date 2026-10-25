@@ -54,11 +54,12 @@ void CandidateWindow::Destroy() {
 }
 
 void CandidateWindow::ShowAt(int x, int y, const std::vector<CandidateItem>& items,
-                             int page, int pageCount) {
+                             int page, int pageCount, int sel) {
     if (!Create()) return;
     items_ = items;
     page_ = page;
     pageCount_ = pageCount;
+    sel_ = sel;
     UpdateTheme();
     RecalcSize();
     // 防止超出屏幕右/下边缘
@@ -74,11 +75,12 @@ void CandidateWindow::ShowAt(int x, int y, const std::vector<CandidateItem>& ite
 }
 
 void CandidateWindow::Update(const std::vector<CandidateItem>& items,
-                             int page, int pageCount) {
+                             int page, int pageCount, int sel) {
     if (!hwnd_) return;
     items_ = items;
     page_ = page;
     pageCount_ = pageCount;
+    sel_ = sel;
     UpdateTheme();
     RecalcSize();
     RECT rc; GetWindowRect(hwnd_, &rc);
@@ -156,12 +158,12 @@ void CandidateWindow::OnPaint() {
     for (size_t i = 0; i < items_.size(); ++i) {
         wchar_t num[8];
         wsprintfW(num, L"%d. ", (int)i + 1);
-        bool first = (i == 0);
-        if (first) {
-            // 首选高亮
-            RECT hl = {2, y - 2, width_ - 2, y + lineHeight_};
+        bool hl = ((int)i == sel_); // 高亮行 = ↑/↓ 移动的选中项（默认第 1 行）
+        if (hl) {
+            // 选中行高亮
+            RECT hlr = {2, y - 2, width_ - 2, y + lineHeight_};
             HBRUSH hbrHl = CreateSolidBrush(colHlBg);
-            FillRect(hdc, &hl, hbrHl);
+            FillRect(hdc, &hlr, hbrHl);
             DeleteObject(hbrHl);
             SetTextColor(hdc, colHlText);
         } else {
@@ -174,7 +176,7 @@ void CandidateWindow::OnPaint() {
             SIZE szText = {};
             GetTextExtentPoint32W(hdc, items_[i].text.c_str(),
                                   (int)items_[i].text.size(), &szText);
-            SetTextColor(hdc, first ? colHintHl : colHint);
+            SetTextColor(hdc, hl ? colHintHl : colHint);
             TextOutW(hdc, 8 + numW_ + szText.cx + 6, y,
                      items_[i].hint.c_str(), (int)items_[i].hint.size());
         }

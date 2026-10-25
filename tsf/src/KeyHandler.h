@@ -58,9 +58,11 @@ public:
     size_t PageSize() const;             // 每页个数 = 设置的候选数量
     int PageCount() const;               // 总页数（按查询上限截断）
     void PageMove(int delta);            // 翻页（边界夹紧，不环绕）
+    void SelectionMove(int delta);       // ↑/↓：页内移动高亮，越界翻页
     // 当前页候选切片；totalOut（可空）返回候选总数
     std::vector<Candidate> CurrentPage(size_t* totalOut = nullptr) const;
     int page() const { return page_; }
+    int selection() const { return sel_; } // 页内高亮下标（0 起；↑↓ 移动）
 
     void SetEngineQuery(std::vector<Candidate> (*query)(const std::string&, void*),
                         void* ctx) {
@@ -90,6 +92,7 @@ private:
     bool chinese_ = true;      // 默认中文模式
     bool fullShape_ = false;   // 全角模式：直通类按键输出全角（编码输入不受影响）
     int page_ = 0;             // 候选当前页（0 起；缓冲变化时归零）
+    int sel_ = 0;              // 页内高亮下标（0 起；↑↓ 移动，空格上屏高亮项）
     std::string buffer_;       // 组字缓冲：a-z
     bool shiftDown_ = false;   // Shift 是否按下（用于点按检测）
     bool shiftUsed_ = false;   // Shift 按下期间有无其他按键

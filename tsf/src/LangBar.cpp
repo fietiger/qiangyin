@@ -88,10 +88,26 @@ static HICON RenderGlyphIcon(LPCWSTR glyph, COLORREF rgb) {
 
 static const COLORREF kGlyphColor = RGB(0x20, 0x20, 0x28); // 近黑，浅/深主题任务栏药丸上都可见
 
+namespace {
+// message-only 窗口类名（异步补发 OnUpdate 用，构造期创建）
+const wchar_t* kPokeWndClass = L"QiangYinLangBarPoke";
+}
+
 CQiangYinLangBarItem::CQiangYinLangBarItem(ILangBarHost* host, bool chinese)
     : _cRef(1), _host(host), _chinese(chinese) {
     _hIconZh = RenderGlyphIcon(L"中", kGlyphColor);
     _hIconEn = RenderGlyphIcon(L"英", kGlyphColor);
+    // poke 窗口在构造期创建（Activate 上下文），绝不在系统回调里建窗。
+    // 任务栏要收到 OnUpdate 才渲染图标，接入 sink 后经此窗口异步补发。
+    WNDCLASSW wc = {};
+    wc.lpfnWndProc = PokeWndProc;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = kPokeWndClass;
+    if (!GetClassInfoW(wc.hInstance, kPokeWndClass, &wc))
+        RegisterClassW(&wc);
+    _pokeWnd = CreateWindowExW(0, kPokeWndClass, L"", WS_POPUP,
+                               0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                               wc.hInstance, this);
 }
 
 CQiangYinLangBarItem::~CQiangYinLangBarItem() {
@@ -269,11 +285,11 @@ STDMETHODIMP CQiangYinLangBarItem::AdviseSink(REFIID riid, IUnknown* punk, DWORD
     if (FAILED(hr)) { qy::log::Write(L"LangBar AdviseSink: QI failed"); return hr; }
     *pdwCookie = kLangBarSinkCookie;
     qy::log::Write(L"LangBar AdviseSink: connected");
-    // 关键：系统接入通知通道的瞬间立刻发一次更新，任务栏才会渲染当前图标。
-    // 否则要等到第一次状态变化（如点 Shift）才显示——切 app 回来图标"消失"就是这个。
-    NotifyIconChanged();
-    // 保险：AddItem 过程中的同步接入可能重入被系统丢弃，150ms 后补一发
-    EnsureDeferredPoke();
+    // 只安排异步通知，绝不在 AdviseSink 内同步调 _pSink->OnUpdate：
+    // AdviseSink 发生在系统 AddItem 流程中（系统持有项表锁），同步重入
+    // 系统sink 在开始菜单/搜索等系统进程里可能死锁——开始菜单长时间
+    // 无响应的嫌疑根因。150ms 后经 poke 窗口在普通消息上下文里补发。
+    SchedulePoke();
     return S_OK;
 }
 
@@ -297,11 +313,7 @@ void CQiangYinLangBarItem::NotifyIconChanged() {
     _pSink->OnUpdate(TF_LBI_ICON | TF_LBI_TEXT | TF_LBI_TOOLTIP | TF_LBI_STATUS);
 }
 
-// ---- 延迟补发：message-only 窗口 + 一次性定时器 ----
-
-namespace {
-const wchar_t* kPokeWndClass = L"QiangYinLangBarPoke";
-}
+// ---- 异步补发：message-only 窗口 + 一次性定时器 ----
 
 LRESULT CALLBACK CQiangYinLangBarItem::PokeWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     CQiangYinLangBarItem* self = nullptr;
@@ -315,6 +327,7 @@ LRESULT CALLBACK CQiangYinLangBarItem::PokeWndProc(HWND hwnd, UINT msg, WPARAM w
     if (msg == WM_TIMER) {
         KillTimer(hwnd, 1);
         if (self && self->_pSink) {
+            // 普通消息上下文（不在系统回调里），同步通知安全
             self->NotifyIconChanged();
             qy::log::Write(L"LangBar deferred poke sent");
         }
@@ -325,20 +338,8 @@ LRESULT CALLBACK CQiangYinLangBarItem::PokeWndProc(HWND hwnd, UINT msg, WPARAM w
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
-void CQiangYinLangBarItem::EnsureDeferredPoke() {
-    if (!_pokeWnd) {
-        WNDCLASSW wc = {};
-        wc.lpfnWndProc = PokeWndProc;
-        wc.hInstance = GetModuleHandleW(nullptr);
-        wc.lpszClassName = kPokeWndClass;
-        if (!GetClassInfoW(wc.hInstance, kPokeWndClass, &wc))
-            RegisterClassW(&wc);
-        _pokeWnd = CreateWindowExW(0, kPokeWndClass, L"", WS_POPUP,
-                                   0, 0, 0, 0, HWND_MESSAGE, nullptr,
-                                   wc.hInstance, this);
-        if (!_pokeWnd) { qy::log::Write(L"LangBar poke wnd create failed"); return; }
-    }
-    SetTimer(_pokeWnd, 1, 150, nullptr);
+void CQiangYinLangBarItem::SchedulePoke() {
+    if (_pokeWnd) SetTimer(_pokeWnd, 1, 150, nullptr);
 }
 
 } // namespace qy

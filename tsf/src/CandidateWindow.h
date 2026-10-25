@@ -22,9 +22,12 @@ public:
 
     bool Create();
     void Destroy();
-    // 在屏幕坐标 (x, y) 显示；items 为当前页候选，page/pageCount 为页码（1 起）
-    void ShowAt(int x, int y, const std::vector<CandidateItem>& items, int page, int pageCount);
-    void Update(const std::vector<CandidateItem>& items, int page, int pageCount);
+    // 在屏幕坐标 (x, y) 显示；items 为当前页候选，page/pageCount 为页码（1 起），
+    // sel 为页内高亮行（0 起，↑/↓ 移动；空格上屏高亮项）
+    void ShowAt(int x, int y, const std::vector<CandidateItem>& items,
+                int page, int pageCount, int sel);
+    void Update(const std::vector<CandidateItem>& items,
+                int page, int pageCount, int sel);
     void Hide();
     bool IsVisible() const;
 
@@ -39,6 +42,7 @@ private:
     std::vector<CandidateItem> items_;
     int page_ = 1;        // 当前页（1 起）
     int pageCount_ = 1;   // 总页数
+    int sel_ = 0;         // 页内高亮行（0 起）
     int lineHeight_ = 24;
     int width_ = 120;
     int numW_ = 24; // 序号 "N. " 列宽

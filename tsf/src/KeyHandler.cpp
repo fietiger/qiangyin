@@ -60,6 +60,7 @@ buffer_.clear();
 shiftDown_ = false;
 shiftUsed_ = false;
 page_ = 0;
+sel_ = 0;
 }
 
 size_t KeyHandler::PageSize() const {
@@ -80,9 +81,29 @@ if (p < 0) p = 0;
 if (p > pc - 1) p = pc - 1;
 if (p != page_) {
 page_ = p;
+sel_ = 0;
 // buffer 没变，借组字刷新通道让候选窗重画当前页
 host_->OnCompositionUpdated(buffer_);
 }
+}
+
+// ↑/↓：页内移动高亮；到页边界则翻页（翻页后高亮落在新页首/尾）
+void KeyHandler::SelectionMove(int delta) {
+int cnt = (int)QueryCandidates().size();
+if (cnt == 0) return;
+size_t ps = PageSize();
+int pageItems = (int)((size_t)(page_ + 1) * ps <= (size_t)cnt ? ps : (size_t)cnt - (size_t)page_ * ps);
+int s = sel_ + delta;
+	if (s < 0) {           // 越过页首 → 上一页尾（上翻落的是非末页，必满页）
+	if (page_ > 0) { PageMove(-1); sel_ = (int)ps - 1; }
+	return;
+	}
+if (s >= pageItems) {  // 越过页尾 → 下一页首
+if (page_ < PageCount() - 1) { PageMove(1); sel_ = 0; }
+return;
+}
+sel_ = s;
+host_->OnCompositionUpdated(buffer_);
 }
 
 std::vector<Candidate> KeyHandler::CurrentPage(size_t* totalOut) const {
@@ -115,15 +136,16 @@ return {};
 void KeyHandler::CommitTopCandidate() {
 auto cands = QueryCandidates();
 if (!cands.empty()) {
-// 空格/标点兜底上屏：当前页的首选（与候选窗所见一致）
-size_t idx = (size_t)page_ * PageSize();
-if (idx >= cands.size()) idx = 0;
+// 空格/标点兜底上屏：当前页的高亮项（与候选窗所见一致）
+size_t idx = (size_t)page_ * PageSize() + (size_t)sel_;
+if (idx >= cands.size()) idx = (size_t)page_ * PageSize();
 	host_->OnCommitText(cands[idx].text);
 } else {
 	host_->OnCommitText(buffer_); // 无候选：原样上屏（极少见）
 }
 buffer_.clear();
 page_ = 0;
+sel_ = 0;
 }
 
 void KeyHandler::ToggleMode() {
@@ -263,10 +285,12 @@ void KeyHandler::FlushCompositionEnterLike() {
 	host_->OnCommitText(buffer_);
 	buffer_.clear();
 	page_ = 0;
+	sel_ = 0;
 	break;
 	default:
 	buffer_.clear();
 	page_ = 0;
+	sel_ = 0;
 	host_->OnCancelComposition();
 	break;
 	}
@@ -310,24 +334,29 @@ return true; // 吃掉，等 KeyUp 再决定是否切换
 	}
 
 	// 翻页：- = ↑ ↓（原版超强音形同款：组字中按 -/= 纯翻页，不上屏）
+	// ↑/↓ 是页内移动高亮（越界翻页）；-/= 是纯翻页
 	if (composing() && !shiftDown_ &&
 	    (vkey == VK_OEM_MINUS || vkey == VK_OEM_PLUS ||
 	     vkey == VK_UP || vkey == VK_DOWN)) {
-	if (vkey == VK_OEM_MINUS || vkey == VK_UP) PageMove(-1);
-	else PageMove(1);
+	if (vkey == VK_OEM_MINUS) PageMove(-1);
+	else if (vkey == VK_OEM_PLUS) PageMove(1);
+	else if (vkey == VK_UP) SelectionMove(-1);
+	else SelectionMove(1);
 	return true;
 	}
 
 	if (vkey >= 'A' && vkey <= 'Z') {
-	// 大写字母（Shift+字母）必输出英文：不进组字直接上屏；
-	// 组字中则先按 Enter 三态收尾。CapsLock 不算（保持简单）
-	if (shiftDown_ || (GetKeyState(VK_SHIFT) & 0x8000)) {
+	// 大写字母必输出英文：Shift 按住 或 CapsLock 开启（大小写锁定模式）
+	// 都不进组字直接上屏；组字中先按 Enter 三态收尾
+	bool caps = (GetKeyState(VK_SHIFT) & 0x8000) || (GetKeyState(VK_CAPITAL) & 1);
+	if (caps) {
 		if (composing()) FlushCompositionEnterLike();
 		host_->OnCommitText(std::string(1, (char)vkey));
 		return true;
 	}
 	bool start = buffer_.empty();
 	page_ = 0; // 新码开始，回到第一页
+	sel_ = 0;
 	buffer_ += static_cast<char>(vkey - 'A' + 'a');
 	// 四键上屏：满 4 码且唯一候选时直接上屏（超强音形行为），不用等空格
 	if (AutoCommitFull() && buffer_.size() >= 4) {
@@ -351,6 +380,7 @@ return true;
 	if (!composing()) return false;
 	buffer_.pop_back();
 	page_ = 0;
+	sel_ = 0;
 	if (buffer_.empty()) host_->OnCancelComposition();
 	else host_->OnCompositionUpdated(buffer_);
 	return true;
@@ -376,6 +406,7 @@ return true;
 	if (!composing()) return false;
 	buffer_.clear();
 	page_ = 0;
+	sel_ = 0;
 	host_->OnCancelComposition();
 	return true;
 	}
@@ -399,6 +430,7 @@ return true;
 		host_->OnCommitText(cands[absIdx].text);
 		buffer_.clear();
 		page_ = 0;
+		sel_ = 0;
 	}
 	// 序号越界也吃掉：保持组字状态不乱
 	return true;

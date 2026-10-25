@@ -642,18 +642,9 @@ void CQiangYinTextService::InitLangBar() {
         QYLOG("InitLangBar: no ITfLangBarItemMgr");
         return;
     }
-    // 自愈：清掉同 GUID 的残留项。Deactivate 时线程管理器可能已在拆除，
-    // RemoveItem 静默失败会让系统 sink 状态错乱——重激活后系统不再
-    // AdviseSink，指示就不显示（要等一次状态变化才回来）。
-    // 先 GetItem+RemoveItem 强制系统走全新接入路径。
-    {
-        ITfLangBarItem* stale = nullptr;
-        if (SUCCEEDED(pMgr->GetItem(GUID_QY_LBI_INPUTMODE, &stale)) && stale) {
-            pMgr->RemoveItem(stale);
-            stale->Release();
-            QYLOG("InitLangBar: removed stale item");
-        }
-    }
+    // 注：不再做 GetItem/RemoveItem 残留清理——语言栏项表是进程内跨线程共享的，
+    // 这里的"残留"可能是同进程另一线程实例刚加的有效项，误删会让那边指示消失；
+    // 且日志显示该清理从未触发过（removed stale = 0）。
     _pLangBarItem = new (std::nothrow) CQiangYinLangBarItem(
         static_cast<ILangBarHost*>(this), _keyHandler.chinese_mode());
     if (!_pLangBarItem) { pMgr->Release(); return; }
@@ -901,10 +892,10 @@ void CQiangYinTextService::UpdateCandidateWindow(TfEditCookie ec, ITfRange* rang
         }
     }
     if (_candWnd.IsVisible()) {
-        _candWnd.Update(items, _keyHandler.page() + 1, pageCount);
+        _candWnd.Update(items, _keyHandler.page() + 1, pageCount, _keyHandler.selection());
         QYLOG("cand window Update");
     } else {
-        _candWnd.ShowAt(x, y, items, _keyHandler.page() + 1, pageCount);
+        _candWnd.ShowAt(x, y, items, _keyHandler.page() + 1, pageCount, _keyHandler.selection());
         wchar_t b[128]; wsprintfW(b, L"cand window ShowAt x=%d y=%d n=%u page=%d/%d",
                                   x, y, (unsigned)items.size(), _keyHandler.page() + 1, pageCount);
         qy::log::Write(b);
