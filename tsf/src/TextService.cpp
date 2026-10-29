@@ -592,6 +592,18 @@ void CQiangYinTextService::OnLangBarOpenUserDict() {
 // Ctrl+'+' / 右键菜单：在线造词。词条预填最近两字，编码按词组规则自动算，
 // 确定后追加进用户词库——文件 mtime 变化触发自动热重载，立即可用
 void CQiangYinTextService::OnOpenAddWord() {
+    // 对话框关闭前先记下属主：对话框弹起后 GetFocus() 已不是原文本框，
+    // 关闭后再取就拿不到正确的恢复目标了。
+    HWND owner = GetFocus();
+    if (!owner) owner = GetForegroundWindow();
+    // 对话框期间 OnPopContext 可能把 _pContext 置空，且应用在对话框
+    // 关闭后未必再调 ITfThreadMgr::SetFocus，导致 ThreadMgr->GetFocus()
+    // 也拿不到原 docmgr；先把当前 context 持有住（AddRef），关闭后
+    // 若 _pContext 为空就用它兜底。属主窗口被模态框禁用，文档在
+    // 对话框期间关不掉，所以这个指针是有效的；若文档真的关了，
+    // 后续 RequestEditSession 只会失败，不会比原来更糟。
+    ITfContext* pSavedContext = _pContext;
+    if (pSavedContext) pSavedContext->AddRef();
     AddWordContext ctx;
     ctx.recent = recentCjk_;
     ctx.mbPath = _engine.FindFile(L"mb.txt");
@@ -600,7 +612,44 @@ void CQiangYinTextService::OnOpenAddWord() {
                                 (unsigned)(ctx.mbPath.empty() ? 0 : 1));
       qy::log::Write(b); }
     std::wstring word, code;
-    if (!ShowAddWordDialog(GetFocus(), ctx, word, code)) return;
+    bool dialogOk = ShowAddWordDialog(owner, ctx, word, code);
+
+    // 关键修复：模态对话框在 OnKeyDown 里跑了嵌套消息循环，焦点/context
+    // 可能在对话框弹着时被换掉；关闭后若不恢复，后续按键会被输入法
+    // 吃掉（中文模式 a-z 本来就吃），但 OnCompositionStarted/Updated
+    // 因 _pContext 为空直接返回，于是“打什么都不出现”，直到切出切回
+    // 触发 Deactivate/Activate 重新拿 context。取消也要恢复，否则
+    // 取消一次同样会把输入法留在死掉的状态。
+    if (owner && IsWindow(owner)) {
+        // 先还键盘焦点：正常应用在 WM_SETFOCUS 里会重新调
+        // ITfThreadMgr::SetFocus，进而触发我们的 OnSetFocus(docmgr)
+        // 把 _pContext 换回来。
+        SetFocus(owner);
+    }
+    int restoreSource = 0; // 0=对话框后已有 1=保存的context 2=ThreadMgr GetFocus 3=仍为空
+    if (!_pContext && pSavedContext) {
+        // 优先用对话框前保存的 context：ThreadMgr 焦点可能已被 Pop 到空，
+        // 这时 GetFocus() 兜底是拿不到的。
+        _pContext = pSavedContext;
+        pSavedContext = nullptr; // 所有权转给 _pContext
+        restoreSource = 1;
+    }
+    if (!_pContext && _pThreadMgr) {
+        // SetFocus 没能换回 context 时（如应用没再调 SetFocus），
+        // 直接从当前焦点 docmgr 取顶层 context 兜底。
+        ITfDocumentMgr* pDocMgr = nullptr;
+        if (SUCCEEDED(_pThreadMgr->GetFocus(&pDocMgr)) && pDocMgr) {
+            pDocMgr->GetTop(&_pContext);
+            pDocMgr->Release();
+        }
+        if (_pContext) restoreSource = 2;
+    }
+    if (!_pContext) restoreSource = 3;
+    if (pSavedContext) pSavedContext->Release(); // 没用上（已有新 context）
+    { wchar_t b[160]; wsprintfW(b, L"addword: dialog ok=%d restored context=%d src=%d",
+                                (int)dialogOk, (int)(_pContext != nullptr), restoreSource);
+      qy::log::Write(b); }
+    if (!dialogOk) return;
 
     if (!Engine::EnsureUserTable()) { QYLOG("addword: ensure table failed"); return; }
     std::wstring path = Engine::UserTablePath();
