@@ -1,5 +1,6 @@
 // 候选窗口实现：极简自绘 popup
 #include "CandidateWindow.h"
+#include "QyLog.h"
 
 namespace qy {
 
@@ -62,19 +63,15 @@ void CandidateWindow::ShowAt(int x, int y, const std::vector<CandidateItem>& ite
     sel_ = sel;
     UpdateTheme();
     RecalcSize();
-    // 防止超出屏幕右/下边缘
-    int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
-    int h = lineHeight_ * (int)items_.size() + 8;
-    if (x + width_ > sw) x = sw - width_;
-    if (y + h > sh) y = y - h - 24;
-    if (x < 0) x = 0;
-    if (y < 0) y = 0;
-    SetWindowPos(hwnd_, HWND_TOPMOST, x, y, width_, h,
+    above_ = false; // 每次重新显示都重新判定放上方/下方
+    int fx = 0, fy = 0;
+    ApplyLayout(x, y, fx, fy);
+    SetWindowPos(hwnd_, HWND_TOPMOST, fx, fy, width_, h_,
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
     InvalidateRect(hwnd_, nullptr, TRUE);
 }
 
-void CandidateWindow::Update(const std::vector<CandidateItem>& items,
+void CandidateWindow::Update(int x, int y, const std::vector<CandidateItem>& items,
                              int page, int pageCount, int sel) {
     if (!hwnd_) return;
     items_ = items;
@@ -83,16 +80,47 @@ void CandidateWindow::Update(const std::vector<CandidateItem>& items,
     sel_ = sel;
     UpdateTheme();
     RecalcSize();
-    RECT rc; GetWindowRect(hwnd_, &rc);
-    SetWindowPos(hwnd_, nullptr, 0, 0, width_,
-                 lineHeight_ * (int)items_.size() + 8,
-                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    int fx = 0, fy = 0;
+    ApplyLayout(x, y, fx, fy);
+    SetWindowPos(hwnd_, nullptr, fx, fy, width_, h_,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+    wchar_t b[96];
+    wsprintfW(b, L"cand window relayout pos=%d,%d size=%dx%d n=%u above=%d",
+              fx, fy, width_, h_, (unsigned)items_.size(), above_ ? 1 : 0);
+    qy::log::Write(b);
     InvalidateRect(hwnd_, nullptr, TRUE);
+}
+
+// 计算最终窗口位置。默认在输入点 (x, y) 下方；屏幕下方放不下时翻到上方，
+// 上方模式锚定下沿（y - h_ - 24）：候选数减少、框体缩小时整体下移，
+// 保证贴近输入点的那条边始终不动。横排输入法高度恒定无此问题，
+// 竖排候选（本输入法）必须此处理，否则缩小后离输入点越来越远。
+void CandidateWindow::ApplyLayout(int x, int y, int& outX, int& outY) {
+    const int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
+    h_ = lineHeight_ * (int)items_.size() + 8;
+    int nx = x, ny = y;
+    if (nx + width_ > sw) nx = sw - width_;
+    if (nx < 0) nx = 0;
+    const bool fitsBelow = (y + h_ <= sh);
+    if (above_) {
+        ny = y - h_ - 24; // 下沿锚定在输入点上方 24px
+        if (ny < 0) {
+            if (fitsBelow) { above_ = false; ny = y; } // 上方也放不下则回下方
+            else ny = 0;
+        }
+    } else if (!fitsBelow) {
+        above_ = true;
+        ny = y - h_ - 24;
+        if (ny < 0) ny = 0;
+    }
+    outX = nx;
+    outY = ny;
 }
 
 void CandidateWindow::Hide() {
     if (hwnd_) ShowWindow(hwnd_, SW_HIDE);
     items_.clear();
+    above_ = false; // 下次显示重新判定布局模式
 }
 
 bool CandidateWindow::IsVisible() const {

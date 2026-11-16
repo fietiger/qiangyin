@@ -941,7 +941,7 @@ void CQiangYinTextService::UpdateCandidateWindow(TfEditCookie ec, ITfRange* rang
         }
     }
     if (_candWnd.IsVisible()) {
-        _candWnd.Update(items, _keyHandler.page() + 1, pageCount, _keyHandler.selection());
+        _candWnd.Update(x, y, items, _keyHandler.page() + 1, pageCount, _keyHandler.selection());
         QYLOG("cand window Update");
     } else {
         _candWnd.ShowAt(x, y, items, _keyHandler.page() + 1, pageCount, _keyHandler.selection());
