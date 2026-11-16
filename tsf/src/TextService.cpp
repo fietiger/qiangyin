@@ -760,6 +760,16 @@ HRESULT CQiangYinTextService::RequestEditSession(DWORD flags, ITfEditSession* se
     }
     HRESULT hrSession = S_OK;
     HRESULT hr = _pContext->RequestEditSession(_tfClientId, session, flags, &hrSession);
+    if (FAILED(hr) && (flags & TF_ES_SYNC)) {
+        // 兼容修复：Chromium/Electron（Paseo 等）与远程会话会拒绝同步读写
+        // 会话，RequestEditSession 直接返回 TF_E_SYNCHRONOUS，组字/上屏全部
+        // 落空——表现为"切到强音后打字无反应"。此时改用异步重发同一 session：
+        // TSF 会排队在应用线程稍后按 FIFO 执行，Start 仍先于 Update，状态
+        // 顺序不变。同步失败时 TSF 不持有 session 引用，此处重发是安全的；
+        // 同步成功（普通 Win32 应用）路径完全不受影响。
+        hr = _pContext->RequestEditSession(_tfClientId, session,
+                (flags & ~TF_ES_SYNC) | TF_ES_ASYNC, &hrSession);
+    }
     session->Release();
     return SUCCEEDED(hr) ? hrSession : hr;
 }
