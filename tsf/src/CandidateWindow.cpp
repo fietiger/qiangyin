@@ -68,6 +68,18 @@ void CandidateWindow::ShowAt(int x, int y, const std::vector<CandidateItem>& ite
     ApplyLayout(x, y, fx, fy);
     SetWindowPos(hwnd_, HWND_TOPMOST, fx, fy, width_, h_,
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    // 首次出现时记录候选框与输入光标的位置关系，便于诊断定位问题：
+    //   input  = 输入光标点（组字区左下角，屏幕坐标）
+    //   win    = 候选窗左上角最终位置
+    //   gap    = 贴近光标那条边到输入点的距离（下方模式=上沿-y；上方模式=y-下沿）
+    //   delta  = 窗口左上角相对输入点的偏移
+    {
+        const int gap = above_ ? (y - (fy + h_)) : (fy - y);
+        wchar_t b[160];
+        wsprintfW(b, L"cand first show: input=%d,%d win=%d,%d size=%dx%d above=%d gap=%d delta=%d,%d",
+                  x, y, fx, fy, width_, h_, above_ ? 1 : 0, gap, fx - x, fy - y);
+        qy::log::Write(b);
+    }
     InvalidateRect(hwnd_, nullptr, TRUE);
 }
 
@@ -96,22 +108,30 @@ void CandidateWindow::Update(int x, int y, const std::vector<CandidateItem>& ite
 // 保证贴近输入点的那条边始终不动。横排输入法高度恒定无此问题，
 // 竖排候选（本输入法）必须此处理，否则缩小后离输入点越来越远。
 void CandidateWindow::ApplyLayout(int x, int y, int& outX, int& outY) {
-    const int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
+    // 边界用"输入点所在显示器的工作区"，而不是 SM_CXSCREEN：
+    // 后者只描述主屏，且 RDP/云电脑客户端分辨率频繁变化时会把窗口钳错位置。
+    RECT wa = {0, 0, GetSystemMetrics(SM_CXSCREEN) - 1, GetSystemMetrics(SM_CYSCREEN) - 1};
+    POINT probe = {x, y};
+    HMONITOR hmon = MonitorFromPoint(probe, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = {sizeof(mi)};
+    if (hmon && GetMonitorInfoW(hmon, &mi)) wa = mi.rcWork;
+    const int waL = wa.left, waR = wa.right, waT = wa.top, waB = wa.bottom;
+
     h_ = lineHeight_ * (int)items_.size() + 8;
     int nx = x, ny = y;
-    if (nx + width_ > sw) nx = sw - width_;
-    if (nx < 0) nx = 0;
-    const bool fitsBelow = (y + h_ <= sh);
+    if (nx + width_ > waR) nx = waR - width_;
+    if (nx < waL) nx = waL;
+    const bool fitsBelow = (y + h_ <= waB);
     if (above_) {
         ny = y - h_ - 24; // 下沿锚定在输入点上方 24px
-        if (ny < 0) {
+        if (ny < waT) {
             if (fitsBelow) { above_ = false; ny = y; } // 上方也放不下则回下方
-            else ny = 0;
+            else ny = waT;
         }
     } else if (!fitsBelow) {
         above_ = true;
         ny = y - h_ - 24;
-        if (ny < 0) ny = 0;
+        if (ny < waT) ny = waT;
     }
     outX = nx;
     outY = ny;

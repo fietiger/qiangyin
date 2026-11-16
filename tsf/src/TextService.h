@@ -122,6 +122,10 @@ TfGuidAtom _gaDisplayAttr = TF_INVALID_GUIDATOM;
     Engine _engine;
     bool _engineTried = false;
     CandidateWindow _candWnd;
+    // 候选框最近一次有效定位（GetTextExt/caret 都拿不到坐标时沿用，
+    // 防止候选框跳到屏幕左上角）
+    POINT _candPos = {};
+    bool _candPosValid = false;
 };
 
 } // namespace qy

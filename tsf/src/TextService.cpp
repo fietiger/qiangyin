@@ -931,24 +931,40 @@ void CQiangYinTextService::UpdateCandidateWindow(TfEditCookie ec, ITfRange* rang
     if (SUCCEEDED(_pContext->GetActiveView(&pView)) && pView) {
         RECT rc = {};
         BOOL clipped = FALSE;
-        if (SUCCEEDED(pView->GetTextExt(ec, range, &rc, &clipped))) {
+        // 全零矩形（Chromium 等布局未就绪时会返回）不能当成功使用，
+        // 否则候选框会被放到屏幕左上角 (0,2)
+        if (SUCCEEDED(pView->GetTextExt(ec, range, &rc, &clipped)) &&
+            (rc.right > rc.left || rc.bottom > rc.top)) {
             x = rc.left; y = rc.bottom + 2;
             placed = true;
         }
         pView->Release();
     }
     if (!placed) {
-        // GetCaretPos 返回客户区坐标，WS_POPUP 需要屏幕坐标，必须转换
+        // 兜底 1：Win32 caret。GetCaretPos 只在本线程拥有 caret 时返回 TRUE；
+        // (0,0) 不可信——Chromium 等无 caret 的应用恰好返回零值，
+        // 旧版在这里拿 (0,0)+20 导致候选框飞到屏幕左上角。
         POINT pt = {};
-        GetCaretPos(&pt);
         HWND hwndFocus = GetFocus();
-        if (hwndFocus) ClientToScreen(hwndFocus, &pt);
-        x = pt.x; y = pt.y + 20;
-        // 兜底：如果还是拿不到有效坐标，放屏幕中央偏下
-        if (x <= 0 && y <= 0) {
-            x = GetSystemMetrics(SM_CXSCREEN) / 2 - 100;
-            y = GetSystemMetrics(SM_CYSCREEN) / 2 + 100;
+        if (hwndFocus && GetCaretPos(&pt) && (pt.x != 0 || pt.y != 0)) {
+            // 客户区坐标 → 屏幕坐标（WS_POPUP 需要屏幕坐标）
+            ClientToScreen(hwndFocus, &pt);
+            x = pt.x; y = pt.y + 20;
+            placed = true;
         }
+    }
+    if (placed) {
+        _candPos.x = x; _candPos.y = y; _candPosValid = true;
+    } else if (_candPosValid) {
+        // 兜底 2：本次拿不到任何坐标 → 沿用最近一次有效位置。
+        // 候选框原地不动，远好于跳去屏幕左上角。
+        x = _candPos.x; y = _candPos.y;
+        qy::log::Write(L"cand pos fallback: reuse last valid pos");
+    } else {
+        // 兜底 3：从未得到过有效位置 → 屏幕中央偏下
+        x = GetSystemMetrics(SM_CXSCREEN) / 2 - 100;
+        y = GetSystemMetrics(SM_CYSCREEN) / 2 + 100;
+        qy::log::Write(L"cand pos fallback: center of screen");
     }
     if (_candWnd.IsVisible()) {
         _candWnd.Update(x, y, items, _keyHandler.page() + 1, pageCount, _keyHandler.selection());
