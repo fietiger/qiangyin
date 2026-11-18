@@ -63,8 +63,10 @@ private:
     LONG _cRef;
     ILangBarHost* _host;      // 弱引用（属主是 TextService）
     bool _chinese;
-    HICON _hIconZh = nullptr; // “中”
-    HICON _hIconEn = nullptr; // “英”
+    HICON _hIconZhLight = nullptr; // “中”（深色字，用于浅色任务栏）
+    HICON _hIconEnLight = nullptr; // “英”（深色字，用于浅色任务栏）
+    HICON _hIconZhDark  = nullptr; // “中”（浅白字，用于深色任务栏：WinServer/深色主题）
+    HICON _hIconEnDark  = nullptr; // “英”（浅白字，用于深色任务栏：WinServer/深色主题）
     ITfLangBarItemSink* _pSink = nullptr;
     DWORD _status = 0;
     HWND _pokeWnd = nullptr;  // message-only 窗口：异步补发 OnUpdate 用

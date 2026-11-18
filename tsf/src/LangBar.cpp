@@ -48,8 +48,10 @@ static HICON RenderGlyphIcon(LPCWSTR glyph, COLORREF rgb) {
     }
     HGDIOBJ oldBmp = SelectObject(hdc, hbmp);
 
+    // 用 GB2312_CHARSET：有雅黑 UI 时仍选雅黑 UI；英文/精简版 Server 缺该字体时
+    // GDI 会按中文字体集回退（如 SimSun / Microsoft YaHei），避免落到西文字体。
     HFONT f = CreateFontW(cy - 2, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-                          DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                          GB2312_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                           ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
                           L"Microsoft YaHei UI");
     HGDIOBJ oldFont = f ? SelectObject(hdc, f) : nullptr;
@@ -60,18 +62,38 @@ static HICON RenderGlyphIcon(LPCWSTR glyph, COLORREF rgb) {
     DrawTextW(hdc, glyph, -1, &rc,
               DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
+    // CreateBitmap 要求单色掩码每行按 WORD（2 字节 = 16 像素）对齐；
+    // 透明处掩码置 1、字形处掩码置 0，兼顾 16 位色远程桌面 / Server 控制台。
+    const int maskStride = ((cx + 15) / 16) * 2;
+    std::vector<BYTE> maskBits(static_cast<size_t>(maskStride) * cy, 0xFF);
+
+    // DIB 32bpp 内存布局为 0xAARRGGBB，而 COLORREF 为 0x00BBGGRR，需显式重组通道
+    const DWORD bgraColor = (static_cast<DWORD>(GetRValue(rgb)) << 16) |
+                            (static_cast<DWORD>(GetGValue(rgb)) << 8) |
+                            static_cast<DWORD>(GetBValue(rgb));
     DWORD* px = static_cast<DWORD*>(bits);
-    for (int i = 0; i < cx * cy; ++i) {
-        DWORD coverage = px[i] & 0xFF; // 白字的 R 分量 = 覆盖率
-        px[i] = (coverage << 24) | rgb;
+    for (int y = 0; y < cy; ++y) {
+        for (int x = 0; x < cx; ++x) {
+            int i = y * cx + x;
+            DWORD p = px[i];
+            DWORD r = (p >> 16) & 0xFF;
+            DWORD g = (p >> 8) & 0xFF;
+            DWORD b = p & 0xFF;
+            DWORD coverage = (r + 2 * g + b) / 4; // 白字黑底亮度即覆盖率
+            if (coverage > 0) {
+                px[i] = (coverage << 24) | bgraColor;
+                maskBits[static_cast<size_t>(y) * maskStride + (x / 8)] &=
+                    static_cast<BYTE>(~(0x80 >> (x % 8)));
+            } else {
+                px[i] = 0; // 透明像素 RGB 清零，避免预乘路径泛白块
+            }
+        }
     }
 
     if (oldFont) { SelectObject(hdc, oldFont); DeleteObject(f); }
     SelectObject(hdc, oldBmp);
 
-    // 32bpp 带 alpha 时掩码不会被用到，全 0 即可
-    std::vector<BYTE> zeroMask(static_cast<size_t>((cx + 7) / 8) * cy, 0);
-    HBITMAP hmask = CreateBitmap(cx, cy, 1, 1, zeroMask.data());
+    HBITMAP hmask = CreateBitmap(cx, cy, 1, 1, maskBits.data());
 
     ICONINFO ii = {};
     ii.fIcon = TRUE;
@@ -86,35 +108,85 @@ static HICON RenderGlyphIcon(LPCWSTR glyph, COLORREF rgb) {
     return hIcon;
 }
 
-static const COLORREF kGlyphColor = RGB(0x20, 0x20, 0x28); // 近黑，浅/深主题任务栏药丸上都可见
+static const COLORREF kGlyphForLightTaskbar = RGB(0x20, 0x20, 0x28); // 浅色任务栏用近黑字
+static const COLORREF kGlyphForDarkTaskbar  = RGB(0xFF, 0xFF, 0xFF); // 深色任务栏用纯白字
 
 namespace {
 // message-only 窗口类名（异步补发 OnUpdate 用，构造期创建）
 const wchar_t* kPokeWndClass = L"QiangYinLangBarPoke";
+
+// 判断任务栏是否为浅色底：
+// - 优先处理高对比度主题（取系统按钮底色亮度）
+// - 常规主题读 HKCU\...\Personalize\SystemUsesLightTheme（1=浅色任务栏，0=深色任务栏）
+// - 若注册表无此键：Windows Server 2016/2019（Win10 1607/1809）尚未引入浅色任务栏，
+//   任务栏恒为纯黑底色，按 false（深色）处理；Win11 / Server 2025（build>=22000）默认浅色。
+bool IsTaskbarLightTheme() {
+    HIGHCONTRASTW hc = {};
+    hc.cbSize = sizeof(hc);
+    if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
+        (hc.dwFlags & HCF_HIGHCONTRASTON)) {
+        COLORREF bg = GetSysColor(COLOR_BTNFACE);
+        int lum = (GetRValue(bg) * 299 + GetGValue(bg) * 587 + GetBValue(bg) * 114) / 1000;
+        return lum >= 128;
+    }
+    DWORD v = 0, size = sizeof(v);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &v, &size) == ERROR_SUCCESS) {
+        return v != 0;
+    }
+    using RtlGetVersionFn = LONG(WINAPI*)(OSVERSIONINFOW*);
+    if (HMODULE ntdll = GetModuleHandleW(L"ntdll.dll")) {
+        auto fn = reinterpret_cast<RtlGetVersionFn>(
+            reinterpret_cast<void*>(GetProcAddress(ntdll, "RtlGetVersion")));
+        if (fn) {
+            OSVERSIONINFOW osvi = {};
+            osvi.dwOSVersionInfoSize = sizeof(osvi);
+            if (fn(&osvi) == 0) return osvi.dwBuildNumber >= 22000;
+        }
+    }
+    return false;
+}
 }
 
 CQiangYinLangBarItem::CQiangYinLangBarItem(ILangBarHost* host, bool chinese)
     : _cRef(1), _host(host), _chinese(chinese) {
-    _hIconZh = RenderGlyphIcon(L"中", kGlyphColor);
-    _hIconEn = RenderGlyphIcon(L"英", kGlyphColor);
+    _hIconZhLight = RenderGlyphIcon(L"中", kGlyphForLightTaskbar);
+    _hIconEnLight = RenderGlyphIcon(L"英", kGlyphForLightTaskbar);
+    _hIconZhDark  = RenderGlyphIcon(L"中", kGlyphForDarkTaskbar);
+    _hIconEnDark  = RenderGlyphIcon(L"英", kGlyphForDarkTaskbar);
     // poke 窗口在构造期创建（Activate 上下文），绝不在系统回调里建窗。
     // 任务栏要收到 OnUpdate 才渲染图标，接入 sink 后经此窗口异步补发。
-    WNDCLASSW wc = {};
-    wc.lpfnWndProc = PokeWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
-    wc.lpszClassName = kPokeWndClass;
-    if (!GetClassInfoW(wc.hInstance, kPokeWndClass, &wc))
+    HINSTANCE hInst = GetModuleHandleW(nullptr);
+    WNDCLASSW tmp = {};
+    if (!GetClassInfoW(hInst, kPokeWndClass, &tmp)) {
+        WNDCLASSW wc = {};
+        wc.lpfnWndProc = PokeWndProc;
+        wc.hInstance = hInst;
+        wc.lpszClassName = kPokeWndClass;
         RegisterClassW(&wc);
+    }
     _pokeWnd = CreateWindowExW(0, kPokeWndClass, L"", WS_POPUP,
                                0, 0, 0, 0, HWND_MESSAGE, nullptr,
-                               wc.hInstance, this);
+                               hInst, this);
+    {
+        wchar_t b[128];
+        wsprintfW(b, L"LangBar init: lightTaskbar=%d icons=%d,%d,%d,%d poke=%d",
+                  IsTaskbarLightTheme() ? 1 : 0,
+                  _hIconZhLight ? 1 : 0, _hIconEnLight ? 1 : 0,
+                  _hIconZhDark ? 1 : 0, _hIconEnDark ? 1 : 0,
+                  _pokeWnd ? 1 : 0);
+        qy::log::Write(b);
+    }
 }
 
 CQiangYinLangBarItem::~CQiangYinLangBarItem() {
     if (_pSink) _pSink->Release();
     if (_pokeWnd) { KillTimer(_pokeWnd, 1); DestroyWindow(_pokeWnd); }
-    if (_hIconZh) DestroyIcon(_hIconZh);
-    if (_hIconEn) DestroyIcon(_hIconEn);
+    if (_hIconZhLight) DestroyIcon(_hIconZhLight);
+    if (_hIconEnLight) DestroyIcon(_hIconEnLight);
+    if (_hIconZhDark)  DestroyIcon(_hIconZhDark);
+    if (_hIconEnDark)  DestroyIcon(_hIconEnDark);
 }
 
 // ---- IUnknown ----
@@ -255,8 +327,11 @@ STDMETHODIMP CQiangYinLangBarItem::OnMenuSelect(UINT wID) {
 
 STDMETHODIMP CQiangYinLangBarItem::GetIcon(HICON* phIcon) {
     if (!phIcon) return E_POINTER;
-    // 交给系统的是副本，系统销毁与否都不影响我们持有的原件
-    HICON src = _chinese ? _hIconZh : _hIconEn;
+    // 每次取图标时按当前任务栏深浅色选择对应字色，交给系统的是副本
+    const bool lightTaskbar = IsTaskbarLightTheme();
+    HICON src = _chinese
+        ? (lightTaskbar ? _hIconZhLight : _hIconZhDark)
+        : (lightTaskbar ? _hIconEnLight : _hIconEnDark);
     if (!src) return E_FAIL;
     *phIcon = CopyIcon(src);
     return *phIcon ? S_OK : E_FAIL;
