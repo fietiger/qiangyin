@@ -3,6 +3,8 @@
 ; 需要文件（由 workflow 准备到 build-installer/staging/）：
 ;   qiangyin_ime.dll  qiangyin.dll  mb.txt  usercode.txt
 
+Unicode true
+
 !include "MUI2.nsh"
 !include "x64.nsh"
 
@@ -16,7 +18,6 @@ Name "强音输入法"
 OutFile "..\QiangYin-Setup-${VERSION}.exe"
 InstallDir "$PROGRAMFILES64\QiangYin"
 RequestExecutionLevel admin
-Unicode true
 SetCompressor /SOLID lzma
 
 !define MUI_ABORTWARNING
@@ -31,34 +32,49 @@ SetCompressor /SOLID lzma
 Section "强音输入法" SecMain
   SetOutPath "$INSTDIR"
 
-  ; 先尝试反注册已存在的旧版本（避免旧 DLL 被占用导致无法覆盖）
-  ${DisableX64FSRedirection}
-  ExecWait '"$SYSDIR\regsvr32.exe" /s /u "$INSTDIR\qiangyin_ime.dll"'
-  ${EnableX64FSRedirection}
+  ; 关键：NSIS 默认 SetOverwrite on 遇到文件被占用会直接弹出 [中止/重试/忽略] 模态框，
+  ; 根本走不到下面的 IfErrors 重命名逻辑！必须设为 SetOverwrite try 静默置错再走重命名替换。
+  SetOverwrite try
 
+  ClearErrors
   File "..\build-installer\staging\qiangyin_ime.dll"
-  IfErrors 0 qy_ime_ok
-    ; DLL 被运行中的进程占用：重命名旧文件再写入，旧文件重启后删除
-    DetailPrint "qiangyin_ime.dll 被占用，尝试重命名替换..."
-    Delete "$INSTDIR\qiangyin_ime.dll.old"
-    Rename "$INSTDIR\qiangyin_ime.dll" "$INSTDIR\qiangyin_ime.dll.old"
+  ${If} ${Errors}
+    ; DLL 被运行中的进程占用：重命名为唯一 .old 文件再写入新版，旧文件排到下次重启自动删除
+    DetailPrint "qiangyin_ime.dll 正在使用中，重命名旧文件后热替换..."
+    GetTempFileName $R0 "$INSTDIR"
+    Delete "$R0"
+    ClearErrors
+    Rename "$INSTDIR\qiangyin_ime.dll" "$R0.old"
+    Delete /REBOOTOK "$R0.old"
+    SetOverwrite on
+    ClearErrors
     File "..\build-installer\staging\qiangyin_ime.dll"
-    IfErrors 0 qy_ime_ok
-      MessageBox MB_ICONSTOP "无法替换 qiangyin_ime.dll，请关闭所有程序后重试。"
+    ${If} ${Errors}
+      MessageBox MB_ICONSTOP "无法替换 qiangyin_ime.dll，请关闭占用程序或注销后重试。"
       Abort
-    Delete /REBOOTOK "$INSTDIR\qiangyin_ime.dll.old"
-  qy_ime_ok:
+    ${EndIf}
+  ${EndIf}
+
+  SetOverwrite try
+  ClearErrors
   File "..\build-installer\staging\qiangyin.dll"
-  IfErrors 0 qy_eng_ok
-    DetailPrint "qiangyin.dll 被占用，尝试重命名替换..."
-    Delete "$INSTDIR\qiangyin.dll.old"
-    Rename "$INSTDIR\qiangyin.dll" "$INSTDIR\qiangyin.dll.old"
+  ${If} ${Errors}
+    DetailPrint "qiangyin.dll 正在使用中，重命名旧文件后热替换..."
+    GetTempFileName $R0 "$INSTDIR"
+    Delete "$R0"
+    ClearErrors
+    Rename "$INSTDIR\qiangyin.dll" "$R0.old"
+    Delete /REBOOTOK "$R0.old"
+    SetOverwrite on
+    ClearErrors
     File "..\build-installer\staging\qiangyin.dll"
-    IfErrors 0 qy_eng_ok
-      MessageBox MB_ICONSTOP "无法替换 qiangyin.dll，请关闭所有程序后重试。"
+    ${If} ${Errors}
+      MessageBox MB_ICONSTOP "无法替换 qiangyin.dll，请关闭占用程序或注销后重试。"
       Abort
-    Delete /REBOOTOK "$INSTDIR\qiangyin.dll.old"
-  qy_eng_ok:
+    ${EndIf}
+  ${EndIf}
+
+  SetOverwrite on
   File "..\build-installer\staging\mb.txt"
   File "..\build-installer\staging\usercode.txt"
 
@@ -117,16 +133,14 @@ Section "Uninstall"
   ; 尝试直接删除（进程已结束，应该能删掉）
   Delete "$INSTDIR\qiangyin_ime.dll"
   Delete "$INSTDIR\qiangyin.dll"
-  Delete "$INSTDIR\qiangyin_ime.dll.old"
-  Delete "$INSTDIR\qiangyin.dll.old"
+  Delete "$INSTDIR\*.old"
   Goto uninstall_common
 
   uninstall_fallback:
   ; 用户选否：排到重启后删除，不报错
   Delete /REBOOTOK "$INSTDIR\qiangyin_ime.dll"
   Delete /REBOOTOK "$INSTDIR\qiangyin.dll"
-  Delete /REBOOTOK "$INSTDIR\qiangyin_ime.dll.old"
-  Delete /REBOOTOK "$INSTDIR\qiangyin.dll.old"
+  Delete /REBOOTOK "$INSTDIR\*.old"
 
   uninstall_common:
   Delete "$INSTDIR\mb.txt"
