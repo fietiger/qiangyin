@@ -93,6 +93,10 @@ public:
 private:
     ~CQiangYinTextService();
     HRESULT RequestEditSession(DWORD flags, ITfEditSession* session);
+    void SetActiveContext(ITfContext* newCtx);
+    void RestoreTopContext();
+    bool EnsureContext(ITfContext* pic);
+    void ResetCompositionState();
     void UpdateCandidateWindow(TfEditCookie ec, ITfRange* range);
     void HideCandidates();
     void InitLangBar();   // Activate：添加任务栏中/英指示项

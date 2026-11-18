@@ -134,18 +134,22 @@ return {};
 }
 
 void KeyHandler::CommitTopCandidate() {
-auto cands = QueryCandidates();
-if (!cands.empty()) {
-// 空格/标点兜底上屏：当前页的高亮项（与候选窗所见一致）
-size_t idx = (size_t)page_ * PageSize() + (size_t)sel_;
-if (idx >= cands.size()) idx = (size_t)page_ * PageSize();
-	host_->OnCommitText(cands[idx].text);
-} else {
-	host_->OnCommitText(buffer_); // 无候选：原样上屏（极少见）
-}
-buffer_.clear();
-page_ = 0;
-sel_ = 0;
+    auto cands = QueryCandidates();
+    std::string text;
+    if (!cands.empty()) {
+        // 空格/标点兜底上屏：当前页的高亮项（与候选窗所见一致）
+        size_t idx = (size_t)page_ * PageSize() + (size_t)sel_;
+        if (idx >= cands.size()) idx = (size_t)page_ * PageSize();
+        text = cands[idx].text;
+    } else {
+        text = buffer_; // 无候选：原样上屏（极少见）
+    }
+    // 必须先清空组字状态再回调宿主 OnCommitText：同步编辑会话会在 OnCommitText
+    // 内部立即执行 OnEditCommit，若 buffer_ 未先清空，宿主会误判仍在组字而不收起候选窗。
+    buffer_.clear();
+    page_ = 0;
+    sel_ = 0;
+    host_->OnCommitText(text);
 }
 
 void KeyHandler::ToggleMode() {
@@ -161,14 +165,18 @@ void KeyHandler::SetChineseMode(bool chinese) {
         case 1:
             CommitTopCandidate();
             break;
-        case 2:
-            host_->OnCommitText(buffer_);
+        case 2: {
+            std::string text = buffer_;
             buffer_.clear();
             page_ = 0;
+            sel_ = 0;
+            host_->OnCommitText(text);
             break;
+        }
         default:
             buffer_.clear();
             page_ = 0;
+            sel_ = 0;
             host_->OnCancelComposition();
             break;
         }
@@ -281,12 +289,14 @@ void KeyHandler::FlushCompositionEnterLike() {
 	case 1:
 	CommitTopCandidate();
 	break;
-	case 2:
-	host_->OnCommitText(buffer_);
+	case 2: {
+	std::string text = buffer_;
 	buffer_.clear();
 	page_ = 0;
 	sel_ = 0;
+	host_->OnCommitText(text);
 	break;
+	}
 	default:
 	buffer_.clear();
 	page_ = 0;
@@ -363,8 +373,11 @@ return true; // 吃掉，等 KeyUp 再决定是否切换
 auto cands = QueryCandidates();
 // 原版配置：候选唯一自动上屏码长=4，自动上屏仅限全码=是
 if (cands.size() == 1 && cands[0].code == buffer_) {
-host_->OnCommitText(cands[0].text);
+std::string text = cands[0].text;
 buffer_.clear();
+page_ = 0;
+sel_ = 0;
+host_->OnCommitText(text);
 return true;
 }
 }
@@ -427,10 +440,11 @@ return true;
 	else if (vkey == VK_OEM_7) idx = 2;               // '=第3候选
 	size_t absIdx = (size_t)page_ * PageSize() + idx; // 翻页后选的是当前页的候选
 	if (absIdx < cands.size()) {
-		host_->OnCommitText(cands[absIdx].text);
+		std::string text = cands[absIdx].text;
 		buffer_.clear();
 		page_ = 0;
 		sel_ = 0;
+		host_->OnCommitText(text);
 	}
 	// 序号越界也吃掉：保持组字状态不乱
 	return true;

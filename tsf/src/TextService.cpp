@@ -376,9 +376,59 @@ STDMETHODIMP CQiangYinTextService::Deactivate() {
     _tfClientId = TF_CLIENTID_NULL;
     _dwThreadMgrSinkCookie = TF_INVALID_COOKIE;
     _composing = false;
+    _candPosValid = false;
     _engine.Unload();
     _engineTried = false;
     return S_OK;
+}
+
+void CQiangYinTextService::ResetCompositionState() {
+    if (_pComposition) {
+        _pComposition->Release();
+        _pComposition = nullptr;
+    }
+    _composing = false;
+    _keyHandler.Reset();
+    HideCandidates();
+}
+
+void CQiangYinTextService::SetActiveContext(ITfContext* newCtx) {
+    if (newCtx == _pContext) return;
+    if (newCtx) newCtx->AddRef();
+    if (_pContext) _pContext->Release();
+    _pContext = newCtx;
+    // 上下文对象已变化：旧 _pComposition 绑定在旧 context 上，在新 context 里继续使用
+    // 会报 TF_E_INVALIDCOOKIE 导致打字无反应，必须同步释放并重置组字状态与坐标缓存。
+    ResetCompositionState();
+    _candPosValid = false;
+}
+
+void CQiangYinTextService::RestoreTopContext() {
+    if (_pContext || !_pThreadMgr) return;
+    ITfDocumentMgr* pDocMgr = nullptr;
+    if (SUCCEEDED(_pThreadMgr->GetFocus(&pDocMgr)) && pDocMgr) {
+        ITfContext* top = nullptr;
+        if (SUCCEEDED(pDocMgr->GetTop(&top)) && top) {
+            SetActiveContext(top);
+            top->Release();
+        }
+        pDocMgr->Release();
+    }
+}
+
+bool CQiangYinTextService::EnsureContext(ITfContext* pic) {
+    if (pic) {
+        if (pic != _pContext) {
+            SetActiveContext(pic);
+            QYLOG("EnsureContext: adopted pic from key event");
+        }
+        return true;
+    }
+    if (!_pContext) {
+        RestoreTopContext();
+        if (_pContext) QYLOG("EnsureContext: restored top context from ThreadMgr");
+    }
+    return _pContext != nullptr;
 }
 
 // ---- ITfThreadMgrEventSink ----
@@ -387,54 +437,76 @@ STDMETHODIMP CQiangYinTextService::OnUninitDocumentMgr(ITfDocumentMgr*) { return
 
 STDMETHODIMP CQiangYinTextService::OnSetFocus(ITfDocumentMgr* pdimFocus,
                                               ITfDocumentMgr*) {
-    if (_pContext) { _pContext->Release(); _pContext = nullptr; }
-    if (pdimFocus) pdimFocus->GetTop(&_pContext);
-    // 焦点切换：只有在没有活动组字时才丢弃状态。
-    // 组字中的焦点通知（如候选窗相关）不应中断输入；
-    // 真正的上下文切换会走 OnCompositionTerminated 做清理。
-    if (!_composing) {
-        _keyHandler.Reset();
-        HideCandidates();
-    }
+    ITfContext* newCtx = nullptr;
+    if (pdimFocus) pdimFocus->GetTop(&newCtx);
+    // 若新旧栈顶 context 相同（例如无焦点转移的抖动通知），SetActiveContext 为空操作，
+    // 不会打断进行中的组字；若确实切到了新输入框或空焦点，则安全清理旧组字。
+    SetActiveContext(newCtx);
+    if (newCtx) newCtx->Release();
     return S_OK;
 }
 
 STDMETHODIMP CQiangYinTextService::OnPushContext(ITfContext* pic) {
-    if (_pContext) _pContext->Release();
-    _pContext = pic;
-    if (_pContext) _pContext->AddRef();
+    SetActiveContext(pic);
     return S_OK;
 }
 
-STDMETHODIMP CQiangYinTextService::OnPopContext(ITfContext*) {
-    if (_pContext) { _pContext->Release(); _pContext = nullptr; }
-    _keyHandler.Reset();
-    HideCandidates();
+STDMETHODIMP CQiangYinTextService::OnPopContext(ITfContext* pic) {
+    if (_pContext && (!pic || pic == _pContext)) {
+        SetActiveContext(nullptr);
+        // 弹出子浮层 context 后，同一 DocumentMgr 下通常仍有主编辑 context，
+        // 系统不会重发 OnSetFocus，必须主动取回当前栈顶 context。
+        RestoreTopContext();
+    }
     return S_OK;
 }
 
 // ---- ITfKeyEventSink ----
 STDMETHODIMP CQiangYinTextService::OnSetFocus(BOOL fForeground) {
-    // 失去前台时：组字中不丢状态（由 OnCompositionTerminated 清理），
-    // 避免候选窗显示期间的焦点抖动把输入灭掉。
-    if (!fForeground && !_composing) {
-        _keyHandler.Reset();
+    if (fForeground) {
+        if (!_pContext) RestoreTopContext();
+    } else {
+        // 失去前台时必定收起置顶候选窗；非组字态同步重置按键缓冲
         HideCandidates();
+        if (!_composing) _keyHandler.Reset();
     }
     return S_OK;
 }
 
-STDMETHODIMP CQiangYinTextService::OnTestKeyDown(ITfContext*, WPARAM wParam,
+STDMETHODIMP CQiangYinTextService::OnTestKeyDown(ITfContext* pic, WPARAM wParam,
                                                  LPARAM lParam, BOOL* pfEaten) {
     if (!pfEaten) return E_POINTER;
-    *pfEaten = _keyHandler.WouldEatKey(static_cast<UINT>(wParam), lParam) ? TRUE : FALSE;
+    UINT vk = static_cast<UINT>(wParam);
+    if (!EnsureContext(pic)) {
+        // 当前窗口确实没有可用 TSF 上下文（如无编辑区的桌面/特殊画布）：
+        // 仅保留 Shift（切中/英）和 Ctrl 组合快捷键，普通字母/数字直接放行给窗口，
+        // 避免按键被输入法吞掉却无法写入组字。
+        bool isModeOrCtrlKey =
+            (vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT) ||
+            ((GetKeyState(VK_CONTROL) & 0x8000) != 0);
+        if (!isModeOrCtrlKey) {
+            *pfEaten = FALSE;
+            return S_OK;
+        }
+    }
+    *pfEaten = _keyHandler.WouldEatKey(vk, lParam) ? TRUE : FALSE;
     return S_OK;
 }
 
-STDMETHODIMP CQiangYinTextService::OnKeyDown(ITfContext*, WPARAM wParam,
+STDMETHODIMP CQiangYinTextService::OnKeyDown(ITfContext* pic, WPARAM wParam,
                                              LPARAM lParam, BOOL* pfEaten) {
     if (!pfEaten) return E_POINTER;
-    *pfEaten = _keyHandler.HandleKeyDown(static_cast<UINT>(wParam), lParam) ? TRUE : FALSE;
+    UINT vk = static_cast<UINT>(wParam);
+    if (!EnsureContext(pic)) {
+        bool isModeOrCtrlKey =
+            (vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT) ||
+            ((GetKeyState(VK_CONTROL) & 0x8000) != 0);
+        if (!isModeOrCtrlKey) {
+            *pfEaten = FALSE;
+            return S_OK;
+        }
+    }
+    *pfEaten = _keyHandler.HandleKeyDown(vk, lParam) ? TRUE : FALSE;
     return S_OK;
 }
 
@@ -513,8 +585,8 @@ void CQiangYinTextService::OnCommitText(const std::string& textUtf8) {
                 recentCjk_.erase(0, recentCjk_.size() - 16);
         }
     }
+    HideCandidates();
     if (!_pContext || textUtf8.empty()) {
-        HideCandidates();
         return;
     }
     RequestEditSession(TF_ES_SYNC | TF_ES_READWRITE,
@@ -522,6 +594,7 @@ void CQiangYinTextService::OnCommitText(const std::string& textUtf8) {
 }
 
 void CQiangYinTextService::OnCancelComposition() {
+    HideCandidates();
     if (!_pContext) return;
     RequestEditSession(TF_ES_SYNC | TF_ES_READWRITE,
         new (std::nothrow) CCancelSession(this));
@@ -671,8 +744,20 @@ void CQiangYinTextService::OnLangBarAddWord() {
 
 // 任务栏图标右键菜单 → 设置对话框（模态，运行在前台应用进程里）
 void CQiangYinTextService::OnLangBarOpenSettings() {
+    HWND owner = GetFocus();
+    if (!owner) owner = GetForegroundWindow();
+    ITfContext* pSavedContext = _pContext;
+    if (pSavedContext) pSavedContext->AddRef();
+
     Settings s = settings_;
-    if (ShowSettingsDialog(GetFocus(), s)) {
+    bool ok = ShowSettingsDialog(owner, s);
+
+    if (owner && IsWindow(owner)) SetFocus(owner);
+    if (!_pContext && pSavedContext) SetActiveContext(pSavedContext);
+    if (!_pContext) RestoreTopContext();
+    if (pSavedContext) pSavedContext->Release();
+
+    if (ok) {
         settings_ = s; // KeyHandler 持有的是本成员的指针，原地生效
         _keyHandler.set_full_shape(settings_.fullShape);
         if (settings_.alwaysChinese && !_keyHandler.chinese_mode())
@@ -760,15 +845,20 @@ HRESULT CQiangYinTextService::RequestEditSession(DWORD flags, ITfEditSession* se
     }
     HRESULT hrSession = S_OK;
     HRESULT hr = _pContext->RequestEditSession(_tfClientId, session, flags, &hrSession);
-    if (FAILED(hr) && (flags & TF_ES_SYNC)) {
-        // 兼容修复：Chromium/Electron（Paseo 等）与远程会话会拒绝同步读写
-        // 会话，RequestEditSession 直接返回 TF_E_SYNCHRONOUS，组字/上屏全部
-        // 落空——表现为"切到强音后打字无反应"。此时改用异步重发同一 session：
-        // TSF 会排队在应用线程稍后按 FIFO 执行，Start 仍先于 Update，状态
-        // 顺序不变。同步失败时 TSF 不持有 session 引用，此处重发是安全的；
-        // 同步成功（普通 Win32 应用）路径完全不受影响。
+    // 兼容修复：Chromium/Electron 与虚拟机远程会话（RDP/Hyper-V 等）常拒绝同步读写锁。
+    // 注意拒绝可能体现在 hr 失败，也可能按标准 TSF 规范返回 hr=S_OK 并将 TF_E_SYNCHRONOUS
+    // / TF_E_LOCKED 填入 hrSession（我们的 DoEditSession 恒返回 S_OK，故 hrSession 失败
+    // 必代表会话未执行）。两种情况统一转 TF_ES_ASYNC 按 FIFO 排队重发；普通同步成功路径不受影响。
+    if ((flags & TF_ES_SYNC) && (FAILED(hr) || FAILED(hrSession))) {
+        hrSession = S_OK;
         hr = _pContext->RequestEditSession(_tfClientId, session,
                 (flags & ~TF_ES_SYNC) | TF_ES_ASYNC, &hrSession);
+        if (FAILED(hr) || FAILED(hrSession)) {
+            wchar_t b[96];
+            wsprintfW(b, L"RequestEditSession async retry failed hr=0x%08X hrSes=0x%08X",
+                      (DWORD)hr, (DWORD)hrSession);
+            qy::log::Write(b);
+        }
     }
     session->Release();
     return SUCCEEDED(hr) ? hrSession : hr;
@@ -777,26 +867,41 @@ HRESULT CQiangYinTextService::RequestEditSession(DWORD flags, ITfEditSession* se
 // ---- edit session 实际工作 ----
 HRESULT CQiangYinTextService::OnEditStartComposition(TfEditCookie ec) {
     { wchar_t b[128]; wsprintfW(b, L"OnEditStartComposition _composing=%d _pComp=%p", _composing ? 1 : 0, _pComposition); qy::log::Write(b); }
-    if (_composing || !_pContext) return S_OK;
+    if (_composing && _pComposition) return S_OK;
+    if (!_pContext) return S_OK;
+    if (_pComposition) { _pComposition->Release(); _pComposition = nullptr; }
+    _composing = false;
 
     ITfRange* pRange = nullptr;
     TF_SELECTION sel = {};
     ULONG fetched = 0;
     HRESULT hr = _pContext->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &sel, &fetched);
-    if (FAILED(hr) || fetched == 0) return S_OK;
+    if (FAILED(hr) || fetched == 0 || !sel.range) {
+        wchar_t b[96];
+        wsprintfW(b, L"OnEditStartComposition: GetSelection failed hr=0x%08X fetched=%lu",
+                  (DWORD)hr, fetched);
+        qy::log::Write(b);
+        return S_OK;
+    }
     pRange = sel.range;
     pRange->Collapse(ec, TF_ANCHOR_START);
 
     ITfContextComposition* pCC = nullptr;
     hr = _pContext->QueryInterface(IID_ITfContextComposition,
                                    reinterpret_cast<void**>(&pCC));
-    if (SUCCEEDED(hr)) {
+    if (SUCCEEDED(hr) && pCC) {
         hr = pCC->StartComposition(ec, pRange,
             static_cast<ITfCompositionSink*>(this), &_pComposition);
         pCC->Release();
     }
     pRange->Release();
-    if (SUCCEEDED(hr) && _pComposition) _composing = true;
+    if (SUCCEEDED(hr) && _pComposition) {
+        _composing = true;
+    } else {
+        wchar_t b[96];
+        wsprintfW(b, L"OnEditStartComposition: StartComposition failed hr=0x%08X", (DWORD)hr);
+        qy::log::Write(b);
+    }
     return S_OK;
 }
 
@@ -818,10 +923,23 @@ static void SetRangeAttribute(TfEditCookie ec, ITfContext* pic, ITfRange* range,
 
 HRESULT CQiangYinTextService::OnEditUpdateComposition(TfEditCookie ec,
                                                       const std::wstring& text) {
-    if (!_composing || !_pComposition || !_pContext) return S_OK;
+    if (!_pContext) return S_OK;
+    // 自愈：若首字母建组字因焦点/锁瞬态未成功，后续按键在同一写锁会话内自动补建组字，
+    // 防止出现 _composing=false 而 buffer_ 非空的整串卡死状态。
+    if (!_composing || !_pComposition) {
+        OnEditStartComposition(ec);
+        if (!_composing || !_pComposition) return S_OK;
+    }
 
     ITfRange* pRange = nullptr;
-    if (FAILED(_pComposition->GetRange(&pRange)) || !pRange) return S_OK;
+    if (FAILED(_pComposition->GetRange(&pRange)) || !pRange) {
+        // 旧 _pComposition 已失效（如被宿主静默结束而未触发回调）：释放后原地重建一次
+        if (_pComposition) { _pComposition->Release(); _pComposition = nullptr; }
+        _composing = false;
+        OnEditStartComposition(ec);
+        if (!_composing || !_pComposition) return S_OK;
+        if (FAILED(_pComposition->GetRange(&pRange)) || !pRange) return S_OK;
+    }
 
     pRange->SetText(ec, 0, text.c_str(), (LONG)text.size());
     SetRangeAttribute(ec, _pContext, pRange, _gaDisplayAttr);
@@ -841,36 +959,36 @@ HRESULT CQiangYinTextService::OnEditUpdateComposition(TfEditCookie ec,
 
 HRESULT CQiangYinTextService::OnEditCommit(TfEditCookie ec, const std::wstring& text) {
     if (!_pContext) return S_OK;
+    bool committedViaComp = false;
     if (_composing && _pComposition) {
         ITfRange* pRange = nullptr;
         if (SUCCEEDED(_pComposition->GetRange(&pRange)) && pRange) {
-            pRange->SetText(ec, 0, text.c_str(), (LONG)text.size());
-            // 光标移到提交文本末尾
-            pRange->Collapse(ec, TF_ANCHOR_END);
-            TF_SELECTION sel = {};
-            sel.range = pRange;
-            sel.style.ase = TF_AE_NONE;
-            sel.style.fInterimChar = FALSE;
-            _pContext->SetSelection(ec, 1, &sel);
+            if (SUCCEEDED(pRange->SetText(ec, 0, text.c_str(), (LONG)text.size()))) {
+                // 光标移到提交文本末尾
+                pRange->Collapse(ec, TF_ANCHOR_END);
+                TF_SELECTION sel = {};
+                sel.range = pRange;
+                sel.style.ase = TF_AE_NONE;
+                sel.style.fInterimChar = FALSE;
+                _pContext->SetSelection(ec, 1, &sel);
+                committedViaComp = true;
+            }
             pRange->Release();
         }
         _pComposition->EndComposition(ec);
-        // 防御：OnCompositionTerminated 可能不被触发（如 sink 未正确注册），
-        // 手动清理状态，避免 _composing 卡住导致后续无法输入。
-        // OnCompositionTerminated 里的清理是幂等的，重复调用无害。
-        if (_composing) {
-            QYLOG("OnEditCommit: manual cleanup after EndComposition");
-            _composing = false;
-            if (_pComposition) { _pComposition->Release(); _pComposition = nullptr; }
-            _keyHandler.Reset();
-        }
-    } else {
-        // 无组字：直接在光标处插入（标点等）
+        // 手动清理组字对象，但不调 _keyHandler.Reset()：
+        // 主动上屏在按键当下已由 KeyHandler 清空了 buffer_；TF_ES_ASYNC 异步模式下
+        // 本函数延后执行，若在此调 Reset() 会把用户紧接着敲入的下一字首码误清空。
+        _composing = false;
+        if (_pComposition) { _pComposition->Release(); _pComposition = nullptr; }
+    }
+    if (!committedViaComp) {
+        // 无组字（标点等）或组字范围已失效兜底：直接在当前光标处插入
         ITfRange* pRange = nullptr;
         TF_SELECTION sel = {};
         ULONG fetched = 0;
         if (SUCCEEDED(_pContext->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &sel, &fetched))
-            && fetched > 0) {
+            && fetched > 0 && sel.range) {
             pRange = sel.range;
             pRange->Collapse(ec, TF_ANCHOR_START);
             pRange->SetText(ec, 0, text.c_str(), (LONG)text.size());
@@ -883,7 +1001,9 @@ HRESULT CQiangYinTextService::OnEditCommit(TfEditCookie ec, const std::wstring& 
             pRange->Release();
         }
     }
-    HideCandidates();
+    if (!_keyHandler.composing()) {
+        HideCandidates();
+    }
     return S_OK;
 }
 
@@ -895,14 +1015,13 @@ HRESULT CQiangYinTextService::OnEditCancel(TfEditCookie ec) {
             pRange->Release();
         }
         _pComposition->EndComposition(ec);
-        // 防御：同 OnEditCommit，手动清理防卡住
-        if (_composing) {
-            _composing = false;
-            if (_pComposition) { _pComposition->Release(); _pComposition = nullptr; }
-            _keyHandler.Reset();
-        }
+        // 同 OnEditCommit：不反向 Reset _keyHandler，防异步模式下误清后续新码
+        _composing = false;
+        if (_pComposition) { _pComposition->Release(); _pComposition = nullptr; }
     }
-    HideCandidates();
+    if (!_keyHandler.composing()) {
+        HideCandidates();
+    }
     return S_OK;
 }
 
@@ -941,15 +1060,16 @@ void CQiangYinTextService::UpdateCandidateWindow(TfEditCookie ec, ITfRange* rang
         pView->Release();
     }
     if (!placed) {
-        // 兜底 1：Win32 caret。GetCaretPos 只在本线程拥有 caret 时返回 TRUE；
-        // (0,0) 不可信——Chromium 等无 caret 的应用恰好返回零值，
-        // 旧版在这里拿 (0,0)+20 导致候选框飞到屏幕左上角。
-        POINT pt = {};
-        HWND hwndFocus = GetFocus();
-        if (hwndFocus && GetCaretPos(&pt) && (pt.x != 0 || pt.y != 0)) {
-            // 客户区坐标 → 屏幕坐标（WS_POPUP 需要屏幕坐标）
-            ClientToScreen(hwndFocus, &pt);
-            x = pt.x; y = pt.y + 20;
+        // 兜底 1：Win32 caret。用 GetGUIThreadInfo 精确判断当前线程是否真正拥有
+        // caret（hwndCaret 非空），既排除 Chromium 等无 caret 应用的假 (0,0)，
+        // 又保留真实 Win32 编辑框在客户区 (0,0) 首字符处的有效光标。
+        GUITHREADINFO gti = {};
+        gti.cbSize = sizeof(gti);
+        if (GetGUIThreadInfo(GetCurrentThreadId(), &gti) && gti.hwndCaret &&
+            (gti.rcCaret.right > gti.rcCaret.left || gti.rcCaret.bottom > gti.rcCaret.top)) {
+            POINT pt = { gti.rcCaret.left, gti.rcCaret.bottom };
+            ClientToScreen(gti.hwndCaret, &pt);
+            x = pt.x; y = pt.y + 2;
             placed = true;
         }
     }
