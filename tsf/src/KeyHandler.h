@@ -84,6 +84,7 @@ private:
     bool ChinesePunct() const { return !settings_ || settings_->chinesePunct; }
     bool EngAutoHalfWidth() const { return !settings_ || settings_->engAutoHalfWidth; }
     bool EngAutoEnPunct() const { return !settings_ || settings_->engAutoEnPunct; }
+    bool IsHorizontal() const { return settings_ && settings_->horizontal; }
     bool CtrlOnly() const; // 仅 Ctrl 按住（无 Shift/Alt）——Ctrl+. 切标点用
     bool CtrlHeld() const; // Ctrl 按住（允许 Shift，无 Alt）——Ctrl+'+' 造词用
 

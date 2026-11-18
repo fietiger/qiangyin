@@ -250,11 +250,13 @@ STDMETHODIMP CQiangYinLangBarItem::GetTooltipString(BSTR* pbstrToolTip) {
 }
 
 // ---- ITfLangBarItemButton ----
-static const UINT kMenuIdSettings  = 100;
-static const UINT kMenuIdPunct     = 101;
-static const UINT kMenuIdFullShape = 102;
-static const UINT kMenuIdUserDict  = 103;
-static const UINT kMenuIdAddWord   = 104;
+static const UINT kMenuIdSettings   = 100;
+static const UINT kMenuIdPunct      = 101;
+static const UINT kMenuIdFullShape  = 102;
+static const UINT kMenuIdUserDict   = 103;
+static const UINT kMenuIdAddWord    = 104;
+static const UINT kMenuIdHorizontal = 105;
+static const UINT kMenuIdAbout      = 106;
 
 STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const RECT*) {
     if (click == TF_LBI_CLK_LEFT) {
@@ -269,10 +271,15 @@ STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const REC
         AppendMenuW(menu,
                     MF_STRING | (_host->LangBarIsFullShape() ? MF_CHECKED : 0),
                     kMenuIdFullShape, L"全角模式\tShift+空格");
+        AppendMenuW(menu,
+                    MF_STRING | (_host->LangBarIsHorizontal() ? MF_CHECKED : 0),
+                    kMenuIdHorizontal, L"横排候选");
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(menu, MF_STRING, kMenuIdUserDict, L"打开用户词库...");
         AppendMenuW(menu, MF_STRING, kMenuIdAddWord, L"造词\tCtrl++");
         AppendMenuW(menu, MF_STRING, kMenuIdSettings, L"设置...");
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(menu, MF_STRING, kMenuIdAbout, L"关于...");
         HWND owner = GetFocus();
         if (!owner) owner = GetForegroundWindow();
         if (owner) {
@@ -280,11 +287,13 @@ STDMETHODIMP CQiangYinLangBarItem::OnClick(TfLBIClick click, POINT pt, const REC
                                         TPM_NONOTIFY | TPM_RETURNCMD | TPM_RIGHTBUTTON,
                                         pt.x, pt.y, owner, nullptr);
             switch (cmd) {
-            case kMenuIdPunct:     _host->OnLangBarTogglePunct(); break;
-            case kMenuIdFullShape: _host->OnLangBarToggleFullShape(); break;
-            case kMenuIdUserDict:  _host->OnLangBarOpenUserDict(); break;
-            case kMenuIdAddWord:   _host->OnLangBarAddWord(); break;
-            case kMenuIdSettings:  _host->OnLangBarOpenSettings(); break;
+            case kMenuIdPunct:      _host->OnLangBarTogglePunct(); break;
+            case kMenuIdFullShape:  _host->OnLangBarToggleFullShape(); break;
+            case kMenuIdHorizontal: _host->OnLangBarToggleHorizontal(); break;
+            case kMenuIdUserDict:   _host->OnLangBarOpenUserDict(); break;
+            case kMenuIdAddWord:    _host->OnLangBarAddWord(); break;
+            case kMenuIdSettings:   _host->OnLangBarOpenSettings(); break;
+            case kMenuIdAbout:      _host->OnLangBarOpenAbout(); break;
             default: break;
             }
         }
@@ -302,12 +311,17 @@ STDMETHODIMP CQiangYinLangBarItem::InitMenu(ITfMenu* pMenu) {
         pMenu->AddMenuItem(kMenuIdFullShape,
                            _host->LangBarIsFullShape() ? TF_LBMENUF_CHECKED : 0,
                            nullptr, nullptr, L"全角模式\tShift+空格", 12, nullptr);
+        pMenu->AddMenuItem(kMenuIdHorizontal,
+                           _host->LangBarIsHorizontal() ? TF_LBMENUF_CHECKED : 0,
+                           nullptr, nullptr, L"横排候选", 4, nullptr);
         pMenu->AddMenuItem(kMenuIdUserDict, 0, nullptr, nullptr,
                            L"打开用户词库", 6, nullptr);
         pMenu->AddMenuItem(kMenuIdAddWord, 0, nullptr, nullptr,
                            L"造词\tCtrl++", 8, nullptr);
         pMenu->AddMenuItem(kMenuIdSettings, 0, nullptr, nullptr,
-                           L"设置...", 4, nullptr);
+                           L"设置...", 5, nullptr);
+        pMenu->AddMenuItem(kMenuIdAbout, 0, nullptr, nullptr,
+                           L"关于...", 5, nullptr);
     }
     return S_OK;
 }
@@ -315,11 +329,13 @@ STDMETHODIMP CQiangYinLangBarItem::InitMenu(ITfMenu* pMenu) {
 STDMETHODIMP CQiangYinLangBarItem::OnMenuSelect(UINT wID) {
     if (!_host) return S_OK;
     switch (wID) {
-    case kMenuIdPunct:     _host->OnLangBarTogglePunct(); break;
-    case kMenuIdFullShape: _host->OnLangBarToggleFullShape(); break;
-    case kMenuIdUserDict:  _host->OnLangBarOpenUserDict(); break;
-    case kMenuIdAddWord:   _host->OnLangBarAddWord(); break;
-    case kMenuIdSettings:  _host->OnLangBarOpenSettings(); break;
+    case kMenuIdPunct:      _host->OnLangBarTogglePunct(); break;
+    case kMenuIdFullShape:  _host->OnLangBarToggleFullShape(); break;
+    case kMenuIdHorizontal: _host->OnLangBarToggleHorizontal(); break;
+    case kMenuIdUserDict:   _host->OnLangBarOpenUserDict(); break;
+    case kMenuIdAddWord:    _host->OnLangBarAddWord(); break;
+    case kMenuIdSettings:   _host->OnLangBarOpenSettings(); break;
+    case kMenuIdAbout:      _host->OnLangBarOpenAbout(); break;
     default: break;
     }
     return S_OK;

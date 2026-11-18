@@ -44,7 +44,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ilammy/msvc-dev-cmd@v1
       - name: configure
-        run: cmake -S tsf -B build-tsf -A x64
+        shell: pwsh
+        run: |
+          $ref = "${{ github.ref_name }}"
+          if ($ref -like "v*") { $ver = $ref } else { $ver = "dev-" + "${{ github.sha }}".Substring(0, 7) }
+          cmake -S tsf -B build-tsf -A x64 "-DQY_VERSION=$ver"
       - name: build
         shell: pwsh
         run: |

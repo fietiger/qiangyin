@@ -1,4 +1,5 @@
 #include "SettingsDialog.h"
+#include "AboutDialog.h"
 #include "resids.h"
 #include <windowsx.h> // ComboBox_xxx / Button 宏
 #include <string.h>   // wcscmp
@@ -7,11 +8,17 @@ namespace qy {
 
 namespace {
 
+struct SettingsDlgState {
+    Settings* s = nullptr;
+    size_t dictCount = 0;
+};
+
 INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_INITDIALOG: {
-        Settings* s = reinterpret_cast<Settings*>(lp);
-        SetWindowLongPtrW(h, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(s));
+        SettingsDlgState* st = reinterpret_cast<SettingsDlgState*>(lp);
+        SetWindowLongPtrW(h, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(st));
+        Settings* s = st->s;
         CheckDlgButton(h, IDC_SHOW_HINT,      s->showHint ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(h, IDC_AUTO_COMMIT,    s->autoCommitFull ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(h, IDC_CHINESE_PUNCT,  s->chinesePunct ? BST_CHECKED : BST_UNCHECKED);
@@ -27,11 +34,14 @@ INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         CheckRadioButton(h, IDC_SW_CLEARS, IDC_SW_CODE,
                          s->switchMode == 2 ? IDC_SW_CODE :
                          s->switchMode == 1 ? IDC_SW_COMMIT : IDC_SW_CLEARS);
+        // 候选窗排列方向二选一
+        CheckRadioButton(h, IDC_CAND_VERTICAL, IDC_CAND_HORIZONTAL,
+                         s->horizontal ? IDC_CAND_HORIZONTAL : IDC_CAND_VERTICAL);
         HWND cb = GetDlgItem(h, IDC_CAND_COMBO);
         for (int n = 5; n <= 10; ++n) {
-            wchar_t s[4] = {0};
-            wsprintfW(s, L"%d", n);
-            ComboBox_AddString(cb, s);
+            wchar_t numStr[4] = {0};
+            wsprintfW(numStr, L"%d", n);
+            ComboBox_AddString(cb, numStr);
         }
         wchar_t cur[4] = {0};
         wsprintfW(cur, L"%d", s->candidateCount);
@@ -40,9 +50,16 @@ INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_COMMAND:
         switch (LOWORD(wp)) {
-        case IDOK: {
-            Settings* s = reinterpret_cast<Settings*>(
+        case IDC_OPEN_ABOUT: {
+            SettingsDlgState* st = reinterpret_cast<SettingsDlgState*>(
                 GetWindowLongPtrW(h, GWLP_USERDATA));
+            ShowAboutDialog(h, st ? st->dictCount : 0);
+            return TRUE;
+        }
+        case IDOK: {
+            SettingsDlgState* st = reinterpret_cast<SettingsDlgState*>(
+                GetWindowLongPtrW(h, GWLP_USERDATA));
+            Settings* s = st ? st->s : nullptr;
             if (!s) { EndDialog(h, IDCANCEL); return TRUE; }
             s->showHint      = IsDlgButtonChecked(h, IDC_SHOW_HINT) == BST_CHECKED;
             s->autoCommitFull= IsDlgButtonChecked(h, IDC_AUTO_COMMIT) == BST_CHECKED;
@@ -58,6 +75,7 @@ INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (IsDlgButtonChecked(h, IDC_ENTER_CODE) == BST_CHECKED)          s->enterMode = 2;
             else if (IsDlgButtonChecked(h, IDC_ENTER_COMMIT) == BST_CHECKED)   s->enterMode = 1;
             else                                                               s->enterMode = 0;
+            s->horizontal = IsDlgButtonChecked(h, IDC_CAND_HORIZONTAL) == BST_CHECKED;
             wchar_t buf[8] = {0};
             GetDlgItemTextW(h, IDC_CAND_COMBO, buf, 8);
             int n = _wtoi(buf);
@@ -79,15 +97,16 @@ INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 
 } // namespace
 
-bool ShowSettingsDialog(HWND owner, Settings& s) {
+bool ShowSettingsDialog(HWND owner, Settings& s, size_t dictCount) {
     // 从本函数地址反查宿主 DLL，拿资源模板
     HMODULE self = nullptr;
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        reinterpret_cast<LPCWSTR>(&SettingsDlgProc), &self);
     if (!self) return false;
+    SettingsDlgState st{ &s, dictCount };
     return DialogBoxParamW(self, MAKEINTRESOURCEW(IDD_SETTINGS), owner,
-                           SettingsDlgProc, reinterpret_cast<LPARAM>(&s)) == IDOK;
+                           SettingsDlgProc, reinterpret_cast<LPARAM>(&st)) == IDOK;
 }
 
 } // namespace qy

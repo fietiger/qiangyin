@@ -9,7 +9,7 @@
 1 ICON "qiangyin.ico"
 
 // 设置对话框（对话框单位）
-IDD_SETTINGS DIALOGEX 0, 0, 222, 190
+IDD_SETTINGS DIALOGEX 0, 0, 222, 212
 STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "强音输入法设置"
 FONT 9, "Microsoft YaHei UI", 400, 0, 0x1
@@ -29,10 +29,14 @@ BEGIN
     AUTORADIOBUTTON "清空组字(&L)", IDC_SW_CLEARS, 126, 130, 88, 10, WS_GROUP
     AUTORADIOBUTTON "上屏首选(&M)", IDC_SW_COMMIT, 126, 144, 88, 10
     AUTORADIOBUTTON "编码上屏(&K)", IDC_SW_CODE, 126, 158, 88, 10
-    LTEXT           "候选数量(&U)：", -1, 12, 174, 58, 8
-    COMBOBOX        IDC_CAND_COMBO, 72, 172, 40, 60, CBS_DROPDOWNLIST | WS_TABSTOP
-    DEFPUSHBUTTON   "确定", IDOK, 118, 170, 45, 14
-    PUSHBUTTON      "取消", IDCANCEL, 168, 170, 45, 14
+    LTEXT           "候选数量(&U)：", -1, 12, 173, 52, 8
+    COMBOBOX        IDC_CAND_COMBO, 66, 170, 34, 60, CBS_DROPDOWNLIST | WS_TABSTOP
+    LTEXT           "排列：", -1, 108, 173, 24, 8
+    AUTORADIOBUTTON "竖排(&V)", IDC_CAND_VERTICAL, 134, 172, 40, 10, WS_GROUP
+    AUTORADIOBUTTON "横排(&O)", IDC_CAND_HORIZONTAL, 176, 172, 40, 10
+    PUSHBUTTON      "关于(&B)...", IDC_OPEN_ABOUT, 12, 191, 50, 14, WS_GROUP | WS_TABSTOP
+    DEFPUSHBUTTON   "确定", IDOK, 118, 191, 45, 14
+    PUSHBUTTON      "取消", IDCANCEL, 168, 191, 45, 14
 END
 
 // 在线加词对话框（Ctrl+'+' 呼出，对齐原版超强音形）
@@ -50,4 +54,20 @@ BEGIN
     LTEXT           "可用 ↑、↓ 更改词长；同码时用户词排在系统词前", -1, 54, 80, 180, 8
     DEFPUSHBUTTON   "确定", IDOK, 186, 10, 45, 14
     PUSHBUTTON      "取消", IDCANCEL, 186, 28, 45, 14
+END
+
+// 关于对话框
+IDD_ABOUT DIALOGEX 0, 0, 236, 128
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "关于 强音输入法"
+FONT 9, "Microsoft YaHei UI", 400, 0, 0x1
+BEGIN
+    ICON            1, -1, 14, 13, 20, 20
+    LTEXT           "强音输入法", IDC_ABOUT_TITLE, 44, 12, 178, 12
+    LTEXT           "", IDC_ABOUT_VERSION, 44, 27, 178, 10
+    CONTROL         "", -1, "Static", SS_ETCHEDHORZ, 14, 44, 208, 1
+    LTEXT           "", IDC_ABOUT_ENGINE, 14, 52, 208, 20
+    LTEXT           "超强音形输入法现代化实现（Rust 查词引擎 + Windows TSF 框架）\n快捷键：Shift 切中/英 · Shift+空格 全/半角 · Ctrl+. 标点 · Ctrl++ 造词", IDC_ABOUT_DESC, 14, 76, 208, 22
+    PUSHBUTTON      "项目主页(&G)...", IDC_ABOUT_REPO, 14, 105, 66, 14
+    DEFPUSHBUTTON   "确定", IDOK, 176, 105, 46, 14
 END

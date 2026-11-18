@@ -16,6 +16,7 @@ struct Settings {
     bool engAutoHalfWidth = true;  // 切到英文模式时自动回半角（全角英文不好打）
     bool engAutoEnPunct = false;   // 切到英文模式时同时关掉中文标点
     int  candidateCount = 10;    // 候选数量（5..10）
+    bool horizontal = false;     // 候选窗排列方向：false=竖排（默认），true=横排
 
     void Load();          // 读注册表，缺失/非法值回落默认
     bool Save() const;    // 写回注册表

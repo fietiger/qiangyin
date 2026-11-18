@@ -16,12 +16,15 @@ class ILangBarHost {
 public:
     virtual void OnLangBarToggleMode() = 0;          // 任务栏图标左键：切换中/英
     virtual void OnLangBarOpenSettings() = 0;        // 任务栏图标右键菜单：设置
+    virtual void OnLangBarOpenAbout() = 0;           // 右键菜单：关于
     virtual void OnLangBarTogglePunct() = 0;         // 右键菜单：中文标点
     virtual void OnLangBarToggleFullShape() = 0;     // 右键菜单：全角模式
+    virtual void OnLangBarToggleHorizontal() = 0;    // 右键菜单：横排候选
     virtual void OnLangBarOpenUserDict() = 0;        // 右键菜单：打开用户词库
     virtual void OnLangBarAddWord() = 0;             // 右键菜单：造词
     virtual bool LangBarIsChinesePunct() const = 0;  // 菜单勾选状态
     virtual bool LangBarIsFullShape() const = 0;
+    virtual bool LangBarIsHorizontal() const = 0;
 protected:
     ~ILangBarHost() = default;
 };

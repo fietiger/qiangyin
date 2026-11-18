@@ -240,14 +240,18 @@ bool KeyHandler::WouldEatKey(UINT vkey, LPARAM /*lParam*/) const {
 	if ((vkey == VK_OEM_PLUS || vkey == VK_ADD) && CtrlHeld())
 	return true; // Ctrl+'+'：在线造词（原版超强音形同款）
 
-	// 翻页键：-/= 与 ↑/↓（组字中；Shift/Ctrl/Alt 组合放行给应用）
+	// 翻页/选字导航键（组字中；Shift/Ctrl/Alt 组合放行给应用）：
+	// 竖排：-/= 翻页，↑/↓ 页内选字；横排：-/= 与 ↑/↓ 翻页，←/→ 页内选字
 	{
 	bool noMod = !((GetKeyState(VK_SHIFT) | GetKeyState(VK_CONTROL) |
 	                GetKeyState(VK_MENU)) & 0x8000);
-	if (composing() && noMod &&
-	    (vkey == VK_OEM_MINUS || vkey == VK_OEM_PLUS ||
-	     vkey == VK_UP || vkey == VK_DOWN))
-	return true;
+	if (composing() && noMod) {
+		if (vkey == VK_OEM_MINUS || vkey == VK_OEM_PLUS ||
+		    vkey == VK_UP || vkey == VK_DOWN)
+			return true;
+		if (IsHorizontal() && (vkey == VK_LEFT || vkey == VK_RIGHT))
+			return true;
+	}
 	}
 
 	if (HasCtrlAlt()) return false; // 快捷键一律放行
@@ -343,16 +347,21 @@ return true; // 吃掉，等 KeyUp 再决定是否切换
 	return false;
 	}
 
-	// 翻页：- = ↑ ↓（原版超强音形同款：组字中按 -/= 纯翻页，不上屏）
-	// ↑/↓ 是页内移动高亮（越界翻页）；-/= 是纯翻页
-	if (composing() && !shiftDown_ &&
-	    (vkey == VK_OEM_MINUS || vkey == VK_OEM_PLUS ||
-	     vkey == VK_UP || vkey == VK_DOWN)) {
-	if (vkey == VK_OEM_MINUS) PageMove(-1);
-	else if (vkey == VK_OEM_PLUS) PageMove(1);
-	else if (vkey == VK_UP) SelectionMove(-1);
-	else SelectionMove(1);
-	return true;
+	// 候选导航与翻页：
+	// 竖排：↑/↓ 页内移动高亮（越界翻页），-/= 纯翻页
+	// 横排：←/→ 页内移动高亮（越界翻页），↑/↓ 与 -/= 纯翻页
+	if (composing() && !shiftDown_) {
+		if (!IsHorizontal()) {
+			if (vkey == VK_OEM_MINUS) { PageMove(-1); return true; }
+			if (vkey == VK_OEM_PLUS)  { PageMove(1);  return true; }
+			if (vkey == VK_UP)        { SelectionMove(-1); return true; }
+			if (vkey == VK_DOWN)      { SelectionMove(1);  return true; }
+		} else {
+			if (vkey == VK_OEM_MINUS || vkey == VK_UP)   { PageMove(-1); return true; }
+			if (vkey == VK_OEM_PLUS  || vkey == VK_DOWN) { PageMove(1);  return true; }
+			if (vkey == VK_LEFT)  { SelectionMove(-1); return true; }
+			if (vkey == VK_RIGHT) { SelectionMove(1);  return true; }
+		}
 	}
 
 	if (vkey >= 'A' && vkey <= 'Z') {

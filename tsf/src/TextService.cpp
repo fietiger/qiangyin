@@ -9,6 +9,7 @@
 #include "Utf.h"
 #include "SettingsDialog.h"
 #include "AddWordDialog.h"
+#include "AboutDialog.h"
 #include <shellapi.h> // ShellExecuteW
 #include <assert.h>
 
@@ -251,6 +252,7 @@ STDMETHODIMP CQiangYinTextService::Activate(ITfThreadMgr* ptim, TfClientId tid) 
     settings_.Load();
     _keyHandler.SetSettings(&settings_);
     _keyHandler.set_full_shape(settings_.fullShape);
+    _candWnd.SetHorizontal(settings_.horizontal);
     if (settings_.alwaysChinese) _keyHandler.set_chinese_mode(true);
 
     ITfSource* pSource = nullptr;
@@ -642,12 +644,26 @@ void CQiangYinTextService::OnLangBarToggleFullShape() {
     settings_.Save();
 }
 
+void CQiangYinTextService::OnLangBarToggleHorizontal() {
+    settings_.horizontal = !settings_.horizontal;
+    settings_.Save();
+    _candWnd.SetHorizontal(settings_.horizontal);
+    // 若当前正在组字，立即按新排列方向重排候选窗
+    if (_composing && _keyHandler.composing()) {
+        OnCompositionUpdated(_keyHandler.buffer());
+    }
+}
+
 bool CQiangYinTextService::LangBarIsChinesePunct() const {
     return settings_.chinesePunct;
 }
 
 bool CQiangYinTextService::LangBarIsFullShape() const {
     return _keyHandler.full_shape();
+}
+
+bool CQiangYinTextService::LangBarIsHorizontal() const {
+    return settings_.horizontal;
 }
 
 // 右键菜单：打开用户词库（没有就创建带说明的模板），保存后输入法自动热重载
@@ -750,7 +766,7 @@ void CQiangYinTextService::OnLangBarOpenSettings() {
     if (pSavedContext) pSavedContext->AddRef();
 
     Settings s = settings_;
-    bool ok = ShowSettingsDialog(owner, s);
+    bool ok = ShowSettingsDialog(owner, s, _engine.Count());
 
     if (owner && IsWindow(owner)) SetFocus(owner);
     if (!_pContext && pSavedContext) SetActiveContext(pSavedContext);
@@ -760,10 +776,28 @@ void CQiangYinTextService::OnLangBarOpenSettings() {
     if (ok) {
         settings_ = s; // KeyHandler 持有的是本成员的指针，原地生效
         _keyHandler.set_full_shape(settings_.fullShape);
+        _candWnd.SetHorizontal(settings_.horizontal);
         if (settings_.alwaysChinese && !_keyHandler.chinese_mode())
             _keyHandler.SetChineseMode(true);
+        if (_composing && _keyHandler.composing())
+            OnCompositionUpdated(_keyHandler.buffer());
         QYLOG("settings saved");
     }
+}
+
+// 任务栏图标右键菜单 → 关于对话框（同样保护焦点与 TSF 上下文）
+void CQiangYinTextService::OnLangBarOpenAbout() {
+    HWND owner = GetFocus();
+    if (!owner) owner = GetForegroundWindow();
+    ITfContext* pSavedContext = _pContext;
+    if (pSavedContext) pSavedContext->AddRef();
+
+    ShowAboutDialog(owner, _engine.Count());
+
+    if (owner && IsWindow(owner)) SetFocus(owner);
+    if (!_pContext && pSavedContext) SetActiveContext(pSavedContext);
+    if (!_pContext) RestoreTopContext();
+    if (pSavedContext) pSavedContext->Release();
 }
 
 // 添加任务栏中/英指示项：item GUID 必须是 GUID_LBI_INPUTMODE，
@@ -1086,6 +1120,7 @@ void CQiangYinTextService::UpdateCandidateWindow(TfEditCookie ec, ITfRange* rang
         y = GetSystemMetrics(SM_CYSCREEN) / 2 + 100;
         qy::log::Write(L"cand pos fallback: center of screen");
     }
+    _candWnd.SetHorizontal(settings_.horizontal);
     if (_candWnd.IsVisible()) {
         _candWnd.Update(x, y, items, _keyHandler.page() + 1, pageCount, _keyHandler.selection());
         QYLOG("cand window Update");

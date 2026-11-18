@@ -2,6 +2,7 @@
 // 资源 ID：qiangyin.rc 与对话框代码共用（rc 里 #include "src/resids.h"）
 #define IDD_SETTINGS      101
 #define IDD_ADDWORD       102
+#define IDD_ABOUT         103
 
 #define IDC_SHOW_HINT      1001
 #define IDC_AUTO_COMMIT    1002
@@ -25,3 +26,15 @@
 #define IDC_SW_CLEARS      1012
 #define IDC_SW_COMMIT      1013
 #define IDC_SW_CODE        1014
+
+// 候选窗排列方向（竖排/横排）与关于按钮
+#define IDC_CAND_VERTICAL   1015
+#define IDC_CAND_HORIZONTAL 1016
+#define IDC_OPEN_ABOUT      1017
+
+// 关于对话框（IDD_ABOUT）
+#define IDC_ABOUT_TITLE     1201
+#define IDC_ABOUT_VERSION   1202
+#define IDC_ABOUT_ENGINE    1203
+#define IDC_ABOUT_DESC      1204
+#define IDC_ABOUT_REPO      1205

@@ -75,12 +75,15 @@ public:
     // ILangBarHost（任务栏中/英图标交互）
     void OnLangBarToggleMode() override;
     void OnLangBarOpenSettings() override;
+    void OnLangBarOpenAbout() override;
     void OnLangBarTogglePunct() override;        // 右键菜单：中文标点
     void OnLangBarToggleFullShape() override;    // 右键菜单：全角模式
+    void OnLangBarToggleHorizontal() override;   // 右键菜单：横排候选
     void OnLangBarOpenUserDict() override;       // 右键菜单：打开用户词库
     void OnLangBarAddWord() override;            // 右键菜单：造词
     bool LangBarIsChinesePunct() const override;
     bool LangBarIsFullShape() const override;
+    bool LangBarIsHorizontal() const override;
 
     // edit session 回调（已有 ec）
     HRESULT OnEditStartComposition(TfEditCookie ec);

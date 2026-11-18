@@ -16,6 +16,17 @@ bool IsSystemDarkTheme() {
         return v == 0;
     return false;
 }
+
+// 取输入点所在显示器的工作区（兼容多屏及 RDP/云桌面动态分辨率）
+RECT GetMonitorWorkArea(int x, int y) {
+    RECT wa = {0, 0, GetSystemMetrics(SM_CXSCREEN) - 1, GetSystemMetrics(SM_CYSCREEN) - 1};
+    POINT probe = {x, y};
+    HMONITOR hmon = MonitorFromPoint(probe, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = {};
+    mi.cbSize = sizeof(mi);
+    if (hmon && GetMonitorInfoW(hmon, &mi)) wa = mi.rcWork;
+    return wa;
+}
 }
 
 void CandidateWindow::UpdateTheme() {
@@ -62,10 +73,11 @@ void CandidateWindow::ShowAt(int x, int y, const std::vector<CandidateItem>& ite
     pageCount_ = pageCount;
     sel_ = sel;
     UpdateTheme();
-    RecalcSize();
+    RECT wa = GetMonitorWorkArea(x, y);
+    RecalcSize((wa.right - wa.left) - 16);
     above_ = false; // 每次重新显示都重新判定放上方/下方
     int fx = 0, fy = 0;
-    ApplyLayout(x, y, fx, fy);
+    ApplyLayout(x, y, wa, fx, fy);
     SetWindowPos(hwnd_, HWND_TOPMOST, fx, fy, width_, h_,
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
     // 首次出现时记录候选框与输入光标的位置关系，便于诊断定位问题：
@@ -76,8 +88,8 @@ void CandidateWindow::ShowAt(int x, int y, const std::vector<CandidateItem>& ite
     {
         const int gap = above_ ? (y - (fy + h_)) : (fy - y);
         wchar_t b[160];
-        wsprintfW(b, L"cand first show: input=%d,%d win=%d,%d size=%dx%d above=%d gap=%d delta=%d,%d",
-                  x, y, fx, fy, width_, h_, above_ ? 1 : 0, gap, fx - x, fy - y);
+        wsprintfW(b, L"cand first show: input=%d,%d win=%d,%d size=%dx%d above=%d horiz=%d gap=%d delta=%d,%d",
+                  x, y, fx, fy, width_, h_, above_ ? 1 : 0, horizontal_ ? 1 : 0, gap, fx - x, fy - y);
         qy::log::Write(b);
     }
     InvalidateRect(hwnd_, nullptr, TRUE);
@@ -91,33 +103,25 @@ void CandidateWindow::Update(int x, int y, const std::vector<CandidateItem>& ite
     pageCount_ = pageCount;
     sel_ = sel;
     UpdateTheme();
-    RecalcSize();
+    RECT wa = GetMonitorWorkArea(x, y);
+    RecalcSize((wa.right - wa.left) - 16);
     int fx = 0, fy = 0;
-    ApplyLayout(x, y, fx, fy);
+    ApplyLayout(x, y, wa, fx, fy);
     SetWindowPos(hwnd_, nullptr, fx, fy, width_, h_,
                  SWP_NOZORDER | SWP_NOACTIVATE);
-    wchar_t b[96];
-    wsprintfW(b, L"cand window relayout pos=%d,%d size=%dx%d n=%u above=%d",
-              fx, fy, width_, h_, (unsigned)items_.size(), above_ ? 1 : 0);
+    wchar_t b[112];
+    wsprintfW(b, L"cand window relayout pos=%d,%d size=%dx%d n=%u above=%d horiz=%d",
+              fx, fy, width_, h_, (unsigned)items_.size(), above_ ? 1 : 0, horizontal_ ? 1 : 0);
     qy::log::Write(b);
     InvalidateRect(hwnd_, nullptr, TRUE);
 }
 
 // 计算最终窗口位置。默认在输入点 (x, y) 下方；屏幕下方放不下时翻到上方，
 // 上方模式锚定下沿（y - h_ - 24）：候选数减少、框体缩小时整体下移，
-// 保证贴近输入点的那条边始终不动。横排输入法高度恒定无此问题，
-// 竖排候选（本输入法）必须此处理，否则缩小后离输入点越来越远。
-void CandidateWindow::ApplyLayout(int x, int y, int& outX, int& outY) {
-    // 边界用"输入点所在显示器的工作区"，而不是 SM_CXSCREEN：
-    // 后者只描述主屏，且 RDP/云电脑客户端分辨率频繁变化时会把窗口钳错位置。
-    RECT wa = {0, 0, GetSystemMetrics(SM_CXSCREEN) - 1, GetSystemMetrics(SM_CYSCREEN) - 1};
-    POINT probe = {x, y};
-    HMONITOR hmon = MonitorFromPoint(probe, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = {sizeof(mi)};
-    if (hmon && GetMonitorInfoW(hmon, &mi)) wa = mi.rcWork;
+// 保证贴近输入点的那条边始终不动。
+void CandidateWindow::ApplyLayout(int x, int y, const RECT& wa, int& outX, int& outY) {
     const int waL = wa.left, waR = wa.right, waT = wa.top, waB = wa.bottom;
 
-    h_ = lineHeight_ * (int)items_.size() + 8;
     int nx = x, ny = y;
     if (nx + width_ > waR) nx = waR - width_;
     if (nx < waL) nx = waL;
@@ -140,6 +144,7 @@ void CandidateWindow::ApplyLayout(int x, int y, int& outX, int& outY) {
 void CandidateWindow::Hide() {
     if (hwnd_) ShowWindow(hwnd_, SW_HIDE);
     items_.clear();
+    hSlots_.clear();
     above_ = false; // 下次显示重新判定布局模式
 }
 
@@ -147,30 +152,89 @@ bool CandidateWindow::IsVisible() const {
     return hwnd_ && IsWindowVisible(hwnd_);
 }
 
-void CandidateWindow::RecalcSize() {
+void CandidateWindow::RecalcSize(int maxBarWidth) {
     HDC hdc = GetDC(hwnd_);
     HGDIOBJ old = SelectObject(hdc, font_);
-    SIZE szNum = {}, szPage = {};
-    GetTextExtentPoint32W(hdc, L"9. ", 3, &szNum);
-    numW_ = szNum.cx;
-    wchar_t page[16] = {0};
-    wsprintfW(page, L"%d/%d", page_, pageCount_);
-    GetTextExtentPoint32W(hdc, page, (int)wcslen(page), &szPage);
-    pageW_ = szPage.cx + 10; // 右侧页码列（含间隙）
-    int w = 60;
-    for (const auto& s : items_) {
-        SIZE sz = {}, szHint = {};
-        GetTextExtentPoint32W(hdc, s.text.c_str(), (int)s.text.size(), &sz);
-        if (!s.hint.empty())
-            GetTextExtentPoint32W(hdc, s.hint.c_str(), (int)s.hint.size(), &szHint);
-        // 8 左边距 + 序号列 + 文本 + (6 间隙 + 提示) + 页码列 + 12 右边距
-        int need = 8 + numW_ + sz.cx + (szHint.cx ? 6 + szHint.cx : 0) + pageW_ + 12;
-        if (need > w) w = need;
-        lineHeight_ = sz.cy + 8;
+
+    SIZE szPage = {};
+    if (pageCount_ > 1) {
+        wchar_t page[16] = {0};
+        wsprintfW(page, L"%d/%d", page_, pageCount_);
+        GetTextExtentPoint32W(hdc, page, (int)wcslen(page), &szPage);
     }
+
+    if (!horizontal_) {
+        hSlots_.clear();
+        SIZE szNum = {};
+        const wchar_t* numSample = items_.size() >= 10 ? L"10. " : L"9. ";
+        GetTextExtentPoint32W(hdc, numSample, (int)wcslen(numSample), &szNum);
+        numW_ = szNum.cx;
+        pageW_ = (pageCount_ > 1) ? (szPage.cx + 10) : 0; // 右侧页码列（含间隙）
+        int w = 60;
+        for (const auto& s : items_) {
+            SIZE sz = {}, szHint = {};
+            GetTextExtentPoint32W(hdc, s.text.c_str(), (int)s.text.size(), &sz);
+            if (!s.hint.empty())
+                GetTextExtentPoint32W(hdc, s.hint.c_str(), (int)s.hint.size(), &szHint);
+            // 8 左边距 + 序号列 + 文本 + (6 间隙 + 提示) + 页码列 + 12 右边距
+            int need = 8 + numW_ + sz.cx + (szHint.cx ? 6 + szHint.cx : 0) + pageW_ + 12;
+            if (need > w) w = need;
+            lineHeight_ = sz.cy + 8;
+        }
+        width_ = w;
+        h_ = lineHeight_ * (int)items_.size() + 8;
+    } else {
+        // 横排模式：各候选项从左到右排列，超出当前显示器工作区宽度时自动折行
+        SIZE szRef = {};
+        GetTextExtentPoint32W(hdc, L"国", 1, &szRef);
+        lineHeight_ = (szRef.cy > 0 ? szRef.cy : 18) + 8;
+        pageW_ = (pageCount_ > 1) ? (szPage.cx + 14) : 0;
+
+        const int kPadX = 10;
+        const int kPadY = 4;
+        const int kItemGap = 14;
+        const int wrapLimit = (maxBarWidth > 240) ? maxBarWidth : 1200;
+
+        hSlots_.resize(items_.size());
+        int curX = kPadX;
+        int curY = kPadY;
+        int maxRowRight = kPadX;
+        int firstRowRight = kPadX;
+        bool onFirstRow = true;
+
+        for (size_t i = 0; i < items_.size(); ++i) {
+            wchar_t num[8] = {0};
+            wsprintfW(num, L"%d. ", (int)i + 1);
+            SIZE szNum = {}, szText = {}, szHint = {};
+            GetTextExtentPoint32W(hdc, num, (int)wcslen(num), &szNum);
+            GetTextExtentPoint32W(hdc, items_[i].text.c_str(), (int)items_[i].text.size(), &szText);
+            if (!items_[i].hint.empty())
+                GetTextExtentPoint32W(hdc, items_[i].hint.c_str(), (int)items_[i].hint.size(), &szHint);
+
+            int itemW = szNum.cx + szText.cx + (szHint.cx ? 4 + szHint.cx : 0);
+            int reserveRight = onFirstRow ? pageW_ : 0;
+            if (curX > kPadX && (curX + itemW + reserveRight + kPadX > wrapLimit)) {
+                curX = kPadX;
+                curY += lineHeight_ + 2;
+                onFirstRow = false;
+            }
+
+            hSlots_[i] = { curX, curY, itemW, szNum.cx, szText.cx };
+            int rightEdge = curX + itemW;
+            if (rightEdge > maxRowRight) maxRowRight = rightEdge;
+            if (onFirstRow && rightEdge > firstRowRight) firstRowRight = rightEdge;
+            curX += itemW + kItemGap;
+        }
+
+        int totalW = maxRowRight + kPadX;
+        int firstRowTotalW = firstRowRight + pageW_ + kPadX;
+        if (firstRowTotalW > totalW) totalW = firstRowTotalW;
+        width_ = totalW > 60 ? totalW : 60;
+        h_ = (curY - kPadY) + lineHeight_ + kPadY * 2;
+    }
+
     SelectObject(hdc, old);
     ReleaseDC(hwnd_, hdc);
-    width_ = w;
 }
 
 void CandidateWindow::OnPaint() {
@@ -192,49 +256,86 @@ void CandidateWindow::OnPaint() {
     HBRUSH hbrBg = CreateSolidBrush(colBg);
     FillRect(hdc, &rc, hbrBg);
     DeleteObject(hbrBg);
-    // 右上角页码 "n/m"（首选高亮行上，灰色弱化）
-    if (pageCount_ > 1) {
-        wchar_t page[16] = {0};
-        wsprintfW(page, L"%d/%d", page_, pageCount_);
-        int len = (int)wcslen(page);
-        SIZE szPage = {};
-        GetTextExtentPoint32W(hdc, page, len, &szPage);
-        SetTextColor(hdc, colHint);
-        TextOutW(hdc, width_ - 8 - szPage.cx, 4, page, len);
-    }
-    int y = 4;
-    for (size_t i = 0; i < items_.size(); ++i) {
-        wchar_t num[8];
-        wsprintfW(num, L"%d. ", (int)i + 1);
-        bool hl = ((int)i == sel_); // 高亮行 = ↑/↓ 移动的选中项（默认第 1 行）
-        if (hl) {
-            // 选中行高亮
-            RECT hlr = {2, y - 2, width_ - 2, y + lineHeight_};
-            HBRUSH hbrHl = CreateSolidBrush(colHlBg);
-            FillRect(hdc, &hlr, hbrHl);
-            DeleteObject(hbrHl);
-            SetTextColor(hdc, colHlText);
-        } else {
-            SetTextColor(hdc, colText);
+
+    if (!horizontal_) {
+        // 右上角页码 "n/m"（首选高亮行上，灰色弱化）
+        if (pageCount_ > 1) {
+            wchar_t page[16] = {0};
+            wsprintfW(page, L"%d/%d", page_, pageCount_);
+            int len = (int)wcslen(page);
+            SIZE szPage = {};
+            GetTextExtentPoint32W(hdc, page, len, &szPage);
+            SetTextColor(hdc, colHint);
+            TextOutW(hdc, width_ - 8 - szPage.cx, 4, page, len);
         }
-        TextOutW(hdc, 8, y, num, (int)wcslen(num));
-        TextOutW(hdc, 8 + numW_, y, items_[i].text.c_str(), (int)items_[i].text.size());
-        // 编码提示：补全该候选还差的编码，灰色弱化
-        if (!items_[i].hint.empty()) {
-            SIZE szText = {};
-            GetTextExtentPoint32W(hdc, items_[i].text.c_str(),
-                                  (int)items_[i].text.size(), &szText);
-            SetTextColor(hdc, hl ? colHintHl : colHint);
-            TextOutW(hdc, 8 + numW_ + szText.cx + 6, y,
-                     items_[i].hint.c_str(), (int)items_[i].hint.size());
+        int y = 4;
+        for (size_t i = 0; i < items_.size(); ++i) {
+            wchar_t num[8];
+            wsprintfW(num, L"%d. ", (int)i + 1);
+            bool hl = ((int)i == sel_); // 高亮行 = ↑/↓ 移动的选中项（默认第 1 行）
+            if (hl) {
+                RECT hlr = {2, y - 2, width_ - 2, y + lineHeight_};
+                HBRUSH hbrHl = CreateSolidBrush(colHlBg);
+                FillRect(hdc, &hlr, hbrHl);
+                DeleteObject(hbrHl);
+                SetTextColor(hdc, colHlText);
+            } else {
+                SetTextColor(hdc, colText);
+            }
+            TextOutW(hdc, 8, y, num, (int)wcslen(num));
+            TextOutW(hdc, 8 + numW_, y, items_[i].text.c_str(), (int)items_[i].text.size());
+            if (!items_[i].hint.empty()) {
+                SIZE szText = {};
+                GetTextExtentPoint32W(hdc, items_[i].text.c_str(),
+                                      (int)items_[i].text.size(), &szText);
+                SetTextColor(hdc, hl ? colHintHl : colHint);
+                TextOutW(hdc, 8 + numW_ + szText.cx + 6, y,
+                         items_[i].hint.c_str(), (int)items_[i].hint.size());
+            }
+            y += lineHeight_;
         }
-        y += lineHeight_;
+    } else {
+        // 横排绘制：每个候选项独立高亮块，右侧显示页码
+        for (size_t i = 0; i < items_.size() && i < hSlots_.size(); ++i) {
+            const HorizSlot& sl = hSlots_[i];
+            wchar_t num[8];
+            wsprintfW(num, L"%d. ", (int)i + 1);
+            bool hl = ((int)i == sel_);
+            int textY = sl.y + 4;
+            if (hl) {
+                RECT hlr = { sl.x - 5, sl.y, sl.x + sl.w + 5, sl.y + lineHeight_ };
+                HBRUSH hbrHl = CreateSolidBrush(colHlBg);
+                FillRect(hdc, &hlr, hbrHl);
+                DeleteObject(hbrHl);
+                SetTextColor(hdc, colHlText);
+            } else {
+                SetTextColor(hdc, colText);
+            }
+            TextOutW(hdc, sl.x, textY, num, (int)wcslen(num));
+            TextOutW(hdc, sl.x + sl.numW, textY,
+                     items_[i].text.c_str(), (int)items_[i].text.size());
+            if (!items_[i].hint.empty()) {
+                SetTextColor(hdc, hl ? colHintHl : colHint);
+                TextOutW(hdc, sl.x + sl.numW + sl.textW + 4, textY,
+                         items_[i].hint.c_str(), (int)items_[i].hint.size());
+            }
+        }
+        if (pageCount_ > 1) {
+            wchar_t page[16] = {0};
+            wsprintfW(page, L"%d/%d", page_, pageCount_);
+            int len = (int)wcslen(page);
+            SIZE szPage = {};
+            GetTextExtentPoint32W(hdc, page, len, &szPage);
+            SetTextColor(hdc, colHint);
+            TextOutW(hdc, width_ - 10 - szPage.cx, 8, page, len);
+        }
     }
+
     // 自绘边框（替代 WS_BORDER，颜色随主题）
     HPEN hpen = CreatePen(PS_SOLID, 1, colBorder);
     HGDIOBJ oldPen = SelectObject(hdc, hpen);
     SelectObject(hdc, GetStockObject(NULL_BRUSH));
-    Rectangle(hdc, 0, 0, width_, lineHeight_ * (int)items_.size() + 8);
+    Rectangle(hdc, 0, 0, width_, h_);
     SelectObject(hdc, oldPen);
     DeleteObject(hpen);
     SelectObject(hdc, old);

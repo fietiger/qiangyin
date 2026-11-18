@@ -19,14 +19,35 @@ set(SRCS
     src/Settings.cpp
     src/SettingsDialog.cpp
     src/AddWordDialog.cpp
+    src/AboutDialog.cpp
     src/dllmain.cpp
     src/qiangyin_ime.def
     qiangyin.rc
 )
 
+# 版本号：CI 通过 -DQY_VERSION=vX.Y.Z 传入；本地未传时自动取 git describe
+if(NOT DEFINED QY_VERSION OR QY_VERSION STREQUAL "")
+    find_package(Git QUIET)
+    if(GIT_FOUND)
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" describe --tags --always
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            OUTPUT_VARIABLE QY_VERSION
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+    endif()
+    if(NOT QY_VERSION)
+        set(QY_VERSION "dev")
+    endif()
+endif()
+message(STATUS "QiangYin IME version: ${QY_VERSION}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/qy_version.h"
+     "#pragma once\n#define QY_VERSION_WSTR L\"${QY_VERSION}\"\n")
+
 add_library(qiangyin_ime SHARED ${SRCS})
 
-target_include_directories(qiangyin_ime PRIVATE src)
+target_include_directories(qiangyin_ime PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}")
 
 # 输出名：qiangyin_ime.dll（不带 lib 前缀）
 set_target_properties(qiangyin_ime PROPERTIES
