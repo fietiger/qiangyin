@@ -27,10 +27,11 @@
 #define IDC_SW_COMMIT      1013
 #define IDC_SW_CODE        1014
 
-// 候选窗排列方向（竖排/横排）与关于按钮
+// 候选窗排列方向、字号与关于按钮
 #define IDC_CAND_VERTICAL   1015
 #define IDC_CAND_HORIZONTAL 1016
 #define IDC_OPEN_ABOUT      1017
+#define IDC_FONT_COMBO      1018
 
 // 关于对话框（IDD_ABOUT）
 #define IDC_ABOUT_TITLE     1201

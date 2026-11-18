@@ -27,6 +27,59 @@ RECT GetMonitorWorkArea(int x, int y) {
     if (hmon && GetMonitorInfoW(hmon, &mi)) wa = mi.rcWork;
     return wa;
 }
+
+// 计算与 WPF 设备无关单位一致的有效渲染 DPI：
+// - DPI_UNAWARE 宿主（由 DWM 整窗位图放大）：返回 96，避免双重放大；
+// - SYSTEM_DPI_AWARE 宿主（跨屏由 DWM 缩放）：返回窗口所属系统 DPI；
+// - PER_MONITOR_DPI_AWARE 宿主（Chrome/VSCode/Win11 记事本等，DWM 不缩放）：
+//   返回目标点 (x,y) 所在显示器的真实有效 DPI，跨不同缩放比副屏时物理字号也恒定。
+int GetEffectiveDpiForPoint(HWND hwnd, int x, int y) {
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (user32 && hwnd) {
+        using GetWndCtxFn = HANDLE(WINAPI*)(HWND);
+        using GetAwarenessFn = int(WINAPI*)(HANDLE); // 0=UNAWARE, 1=SYSTEM, 2=PER_MONITOR
+        using GetDpiForWindowFn = UINT(WINAPI*)(HWND);
+
+        auto fnCtx = reinterpret_cast<GetWndCtxFn>(
+            reinterpret_cast<void*>(GetProcAddress(user32, "GetWindowDpiAwarenessContext")));
+        auto fnAware = reinterpret_cast<GetAwarenessFn>(
+            reinterpret_cast<void*>(GetProcAddress(user32, "GetAwarenessFromDpiAwarenessContext")));
+        auto fnWndDpi = reinterpret_cast<GetDpiForWindowFn>(
+            reinterpret_cast<void*>(GetProcAddress(user32, "GetDpiForWindow")));
+
+        if (fnCtx && fnAware) {
+            int awareness = fnAware(fnCtx(hwnd));
+            if (awareness == 0) return 96; // UNAWARE：交由 DWM 等比放大
+            if (awareness == 1 && fnWndDpi) {
+                UINT d = fnWndDpi(hwnd);
+                if (d >= 96) return static_cast<int>(d);
+            }
+        }
+    }
+
+    // Per-Monitor 感知或旧版系统兜底：Shcore!GetDpiForMonitor(MDT_EFFECTIVE_DPI=0)
+    // 该 API 本身也会按当前进程 DPI 感知模式返回对应有效值
+    POINT probe = {x, y};
+    HMONITOR hmon = MonitorFromPoint(probe, MONITOR_DEFAULTTONEAREST);
+    if (hmon) {
+        static HMODULE s_shcore = LoadLibraryW(L"Shcore.dll");
+        if (s_shcore) {
+            using GetDpiForMonitorFn = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
+            static auto fnMonDpi = reinterpret_cast<GetDpiForMonitorFn>(
+                reinterpret_cast<void*>(GetProcAddress(s_shcore, "GetDpiForMonitor")));
+            if (fnMonDpi) {
+                UINT dx = 96, dy = 96;
+                if (SUCCEEDED(fnMonDpi(hmon, 0 /*MDT_EFFECTIVE_DPI*/, &dx, &dy)) && dy >= 96)
+                    return static_cast<int>(dy);
+            }
+        }
+    }
+
+    HDC hdc = GetDC(nullptr);
+    int dpi = hdc ? GetDeviceCaps(hdc, LOGPIXELSY) : 96;
+    if (hdc) ReleaseDC(nullptr, hdc);
+    return dpi >= 96 ? dpi : 96;
+}
 }
 
 void CandidateWindow::UpdateTheme() {
@@ -37,31 +90,46 @@ CandidateWindow::CandidateWindow() = default;
 
 CandidateWindow::~CandidateWindow() { Destroy(); }
 
+void CandidateWindow::EnsureFont(int dpi) {
+    if (dpi < 96) dpi = 96;
+    if (font_ && appliedFontPt_ == fontSizePt_ && dpi_ == dpi) return;
+    dpi_ = dpi;
+    appliedFontPt_ = fontSizePt_;
+    if (font_) { DeleteObject(font_); font_ = nullptr; }
+    // 负高度 = 真实字符字面高度（WPF / 标准点制换算：px = pt * dpi / 72）
+    int pxHeight = -MulDiv(fontSizePt_, dpi_, 72);
+    font_ = CreateFontW(pxHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                        GB2312_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Microsoft YaHei UI");
+}
+
 bool CandidateWindow::Create() {
     if (hwnd_) return true;
-    WNDCLASSW wc = {};
-    wc.lpfnWndProc = WndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
-    wc.lpszClassName = kClassName;
-    wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
-    wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)); // IDC_ARROW
-    if (!GetClassInfoW(wc.hInstance, kClassName, &wc))
+    HINSTANCE hInst = GetModuleHandleW(nullptr);
+    WNDCLASSW tmp = {};
+    if (!GetClassInfoW(hInst, kClassName, &tmp)) {
+        WNDCLASSW wc = {};
+        wc.lpfnWndProc = WndProc;
+        wc.hInstance = hInst;
+        wc.lpszClassName = kClassName;
+        wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+        wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)); // IDC_ARROW
         RegisterClassW(&wc);
+    }
 
     hwnd_ = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
         kClassName, L"", WS_POPUP, // 边框在 OnPaint 自绘（颜色随系统深浅色）
-        0, 0, 120, 60, nullptr, nullptr, wc.hInstance, this);
+        0, 0, 120, 60, nullptr, nullptr, hInst, this);
     if (!hwnd_) return false;
 
-    font_ = CreateFontW(18, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                        DEFAULT_QUALITY, DEFAULT_PITCH, L"Microsoft YaHei");
+    EnsureFont(96);
     return true;
 }
 
 void CandidateWindow::Destroy() {
     if (font_) { DeleteObject(font_); font_ = nullptr; }
+    appliedFontPt_ = 0;
     if (hwnd_) { DestroyWindow(hwnd_); hwnd_ = nullptr; }
 }
 
@@ -73,8 +141,9 @@ void CandidateWindow::ShowAt(int x, int y, const std::vector<CandidateItem>& ite
     pageCount_ = pageCount;
     sel_ = sel;
     UpdateTheme();
+    EnsureFont(GetEffectiveDpiForPoint(hwnd_, x, y));
     RECT wa = GetMonitorWorkArea(x, y);
-    RecalcSize((wa.right - wa.left) - 16);
+    RecalcSize((wa.right - wa.left) - Scale(16));
     above_ = false; // 每次重新显示都重新判定放上方/下方
     int fx = 0, fy = 0;
     ApplyLayout(x, y, wa, fx, fy);
@@ -87,9 +156,9 @@ void CandidateWindow::ShowAt(int x, int y, const std::vector<CandidateItem>& ite
     //   delta  = 窗口左上角相对输入点的偏移
     {
         const int gap = above_ ? (y - (fy + h_)) : (fy - y);
-        wchar_t b[160];
-        wsprintfW(b, L"cand first show: input=%d,%d win=%d,%d size=%dx%d above=%d horiz=%d gap=%d delta=%d,%d",
-                  x, y, fx, fy, width_, h_, above_ ? 1 : 0, horizontal_ ? 1 : 0, gap, fx - x, fy - y);
+        wchar_t b[180];
+        wsprintfW(b, L"cand first show: input=%d,%d win=%d,%d size=%dx%d dpi=%d pt=%d above=%d horiz=%d gap=%d delta=%d,%d",
+                  x, y, fx, fy, width_, h_, dpi_, fontSizePt_, above_ ? 1 : 0, horizontal_ ? 1 : 0, gap, fx - x, fy - y);
         qy::log::Write(b);
     }
     InvalidateRect(hwnd_, nullptr, TRUE);
@@ -103,38 +172,40 @@ void CandidateWindow::Update(int x, int y, const std::vector<CandidateItem>& ite
     pageCount_ = pageCount;
     sel_ = sel;
     UpdateTheme();
+    EnsureFont(GetEffectiveDpiForPoint(hwnd_, x, y));
     RECT wa = GetMonitorWorkArea(x, y);
-    RecalcSize((wa.right - wa.left) - 16);
+    RecalcSize((wa.right - wa.left) - Scale(16));
     int fx = 0, fy = 0;
     ApplyLayout(x, y, wa, fx, fy);
     SetWindowPos(hwnd_, nullptr, fx, fy, width_, h_,
                  SWP_NOZORDER | SWP_NOACTIVATE);
-    wchar_t b[112];
-    wsprintfW(b, L"cand window relayout pos=%d,%d size=%dx%d n=%u above=%d horiz=%d",
-              fx, fy, width_, h_, (unsigned)items_.size(), above_ ? 1 : 0, horizontal_ ? 1 : 0);
+    wchar_t b[128];
+    wsprintfW(b, L"cand window relayout pos=%d,%d size=%dx%d n=%u dpi=%d above=%d horiz=%d",
+              fx, fy, width_, h_, (unsigned)items_.size(), dpi_, above_ ? 1 : 0, horizontal_ ? 1 : 0);
     qy::log::Write(b);
     InvalidateRect(hwnd_, nullptr, TRUE);
 }
 
 // 计算最终窗口位置。默认在输入点 (x, y) 下方；屏幕下方放不下时翻到上方，
-// 上方模式锚定下沿（y - h_ - 24）：候选数减少、框体缩小时整体下移，
+// 上方模式锚定下沿（y - h_ - upGap）：候选数减少、框体缩小时整体下移，
 // 保证贴近输入点的那条边始终不动。
 void CandidateWindow::ApplyLayout(int x, int y, const RECT& wa, int& outX, int& outY) {
     const int waL = wa.left, waR = wa.right, waT = wa.top, waB = wa.bottom;
+    const int upGap = Scale(24);
 
     int nx = x, ny = y;
     if (nx + width_ > waR) nx = waR - width_;
     if (nx < waL) nx = waL;
     const bool fitsBelow = (y + h_ <= waB);
     if (above_) {
-        ny = y - h_ - 24; // 下沿锚定在输入点上方 24px
+        ny = y - h_ - upGap; // 下沿锚定在输入点上方（随 DPI 等比缩放）
         if (ny < waT) {
             if (fitsBelow) { above_ = false; ny = y; } // 上方也放不下则回下方
             else ny = waT;
         }
     } else if (!fitsBelow) {
         above_ = true;
-        ny = y - h_ - 24;
+        ny = y - h_ - upGap;
         if (ny < waT) ny = waT;
     }
     outX = nx;
@@ -163,37 +234,45 @@ void CandidateWindow::RecalcSize(int maxBarWidth) {
         GetTextExtentPoint32W(hdc, page, (int)wcslen(page), &szPage);
     }
 
+    const int pad4  = Scale(4);
+    const int pad6  = Scale(6);
+    const int pad8  = Scale(8);
+    const int pad10 = Scale(10);
+    const int pad12 = Scale(12);
+    const int minW  = Scale(60);
+
     if (!horizontal_) {
         hSlots_.clear();
         SIZE szNum = {};
         const wchar_t* numSample = items_.size() >= 10 ? L"10. " : L"9. ";
         GetTextExtentPoint32W(hdc, numSample, (int)wcslen(numSample), &szNum);
         numW_ = szNum.cx;
-        pageW_ = (pageCount_ > 1) ? (szPage.cx + 10) : 0; // 右侧页码列（含间隙）
-        int w = 60;
+        pageW_ = (pageCount_ > 1) ? (szPage.cx + pad10) : 0; // 右侧页码列（含间隙）
+        int w = minW;
         for (const auto& s : items_) {
             SIZE sz = {}, szHint = {};
             GetTextExtentPoint32W(hdc, s.text.c_str(), (int)s.text.size(), &sz);
             if (!s.hint.empty())
                 GetTextExtentPoint32W(hdc, s.hint.c_str(), (int)s.hint.size(), &szHint);
-            // 8 左边距 + 序号列 + 文本 + (6 间隙 + 提示) + 页码列 + 12 右边距
-            int need = 8 + numW_ + sz.cx + (szHint.cx ? 6 + szHint.cx : 0) + pageW_ + 12;
+            int need = pad8 + numW_ + sz.cx + (szHint.cx ? pad6 + szHint.cx : 0) + pageW_ + pad12;
             if (need > w) w = need;
-            lineHeight_ = sz.cy + 8;
+            lineHeight_ = sz.cy + pad8;
         }
         width_ = w;
-        h_ = lineHeight_ * (int)items_.size() + 8;
+        h_ = lineHeight_ * (int)items_.size() + pad4 * 2;
     } else {
         // 横排模式：各候选项从左到右排列，超出当前显示器工作区宽度时自动折行
         SIZE szRef = {};
         GetTextExtentPoint32W(hdc, L"国", 1, &szRef);
-        lineHeight_ = (szRef.cy > 0 ? szRef.cy : 18) + 8;
-        pageW_ = (pageCount_ > 1) ? (szPage.cx + 14) : 0;
+        lineHeight_ = (szRef.cy > 0 ? szRef.cy : Scale(18)) + pad8;
+        pageW_ = (pageCount_ > 1) ? (szPage.cx + Scale(14)) : 0;
 
-        const int kPadX = 10;
-        const int kPadY = 4;
-        const int kItemGap = 14;
-        const int wrapLimit = (maxBarWidth > 240) ? maxBarWidth : 1200;
+        const int kPadX = pad10;
+        const int kPadY = pad4;
+        // 项间距随字号与 DPI 自然伸展，大字号下也不显得拥挤
+        int kItemGap = Scale(14);
+        if (lineHeight_ / 2 > kItemGap) kItemGap = lineHeight_ / 2;
+        const int wrapLimit = (maxBarWidth > Scale(240)) ? maxBarWidth : Scale(1200);
 
         hSlots_.resize(items_.size());
         int curX = kPadX;
@@ -211,11 +290,11 @@ void CandidateWindow::RecalcSize(int maxBarWidth) {
             if (!items_[i].hint.empty())
                 GetTextExtentPoint32W(hdc, items_[i].hint.c_str(), (int)items_[i].hint.size(), &szHint);
 
-            int itemW = szNum.cx + szText.cx + (szHint.cx ? 4 + szHint.cx : 0);
+            int itemW = szNum.cx + szText.cx + (szHint.cx ? pad4 + szHint.cx : 0);
             int reserveRight = onFirstRow ? pageW_ : 0;
             if (curX > kPadX && (curX + itemW + reserveRight + kPadX > wrapLimit)) {
                 curX = kPadX;
-                curY += lineHeight_ + 2;
+                curY += lineHeight_ + Scale(2);
                 onFirstRow = false;
             }
 
@@ -229,7 +308,7 @@ void CandidateWindow::RecalcSize(int maxBarWidth) {
         int totalW = maxRowRight + kPadX;
         int firstRowTotalW = firstRowRight + pageW_ + kPadX;
         if (firstRowTotalW > totalW) totalW = firstRowTotalW;
-        width_ = totalW > 60 ? totalW : 60;
+        width_ = totalW > minW ? totalW : minW;
         h_ = (curY - kPadY) + lineHeight_ + kPadY * 2;
     }
 
@@ -257,6 +336,13 @@ void CandidateWindow::OnPaint() {
     FillRect(hdc, &rc, hbrBg);
     DeleteObject(hbrBg);
 
+    const int pad2  = Scale(2);
+    const int pad4  = Scale(4);
+    const int pad5  = Scale(5);
+    const int pad6  = Scale(6);
+    const int pad8  = Scale(8);
+    const int pad10 = Scale(10);
+
     if (!horizontal_) {
         // 右上角页码 "n/m"（首选高亮行上，灰色弱化）
         if (pageCount_ > 1) {
@@ -266,15 +352,15 @@ void CandidateWindow::OnPaint() {
             SIZE szPage = {};
             GetTextExtentPoint32W(hdc, page, len, &szPage);
             SetTextColor(hdc, colHint);
-            TextOutW(hdc, width_ - 8 - szPage.cx, 4, page, len);
+            TextOutW(hdc, width_ - pad8 - szPage.cx, pad4, page, len);
         }
-        int y = 4;
+        int y = pad4;
         for (size_t i = 0; i < items_.size(); ++i) {
             wchar_t num[8];
             wsprintfW(num, L"%d. ", (int)i + 1);
             bool hl = ((int)i == sel_); // 高亮行 = ↑/↓ 移动的选中项（默认第 1 行）
             if (hl) {
-                RECT hlr = {2, y - 2, width_ - 2, y + lineHeight_};
+                RECT hlr = { pad2, y - pad2, width_ - pad2, y + lineHeight_ };
                 HBRUSH hbrHl = CreateSolidBrush(colHlBg);
                 FillRect(hdc, &hlr, hbrHl);
                 DeleteObject(hbrHl);
@@ -282,14 +368,14 @@ void CandidateWindow::OnPaint() {
             } else {
                 SetTextColor(hdc, colText);
             }
-            TextOutW(hdc, 8, y, num, (int)wcslen(num));
-            TextOutW(hdc, 8 + numW_, y, items_[i].text.c_str(), (int)items_[i].text.size());
+            TextOutW(hdc, pad8, y, num, (int)wcslen(num));
+            TextOutW(hdc, pad8 + numW_, y, items_[i].text.c_str(), (int)items_[i].text.size());
             if (!items_[i].hint.empty()) {
                 SIZE szText = {};
                 GetTextExtentPoint32W(hdc, items_[i].text.c_str(),
                                       (int)items_[i].text.size(), &szText);
                 SetTextColor(hdc, hl ? colHintHl : colHint);
-                TextOutW(hdc, 8 + numW_ + szText.cx + 6, y,
+                TextOutW(hdc, pad8 + numW_ + szText.cx + pad6, y,
                          items_[i].hint.c_str(), (int)items_[i].hint.size());
             }
             y += lineHeight_;
@@ -301,9 +387,9 @@ void CandidateWindow::OnPaint() {
             wchar_t num[8];
             wsprintfW(num, L"%d. ", (int)i + 1);
             bool hl = ((int)i == sel_);
-            int textY = sl.y + 4;
+            int textY = sl.y + pad4;
             if (hl) {
-                RECT hlr = { sl.x - 5, sl.y, sl.x + sl.w + 5, sl.y + lineHeight_ };
+                RECT hlr = { sl.x - pad5, sl.y, sl.x + sl.w + pad5, sl.y + lineHeight_ };
                 HBRUSH hbrHl = CreateSolidBrush(colHlBg);
                 FillRect(hdc, &hlr, hbrHl);
                 DeleteObject(hbrHl);
@@ -316,7 +402,7 @@ void CandidateWindow::OnPaint() {
                      items_[i].text.c_str(), (int)items_[i].text.size());
             if (!items_[i].hint.empty()) {
                 SetTextColor(hdc, hl ? colHintHl : colHint);
-                TextOutW(hdc, sl.x + sl.numW + sl.textW + 4, textY,
+                TextOutW(hdc, sl.x + sl.numW + sl.textW + pad4, textY,
                          items_[i].hint.c_str(), (int)items_[i].hint.size());
             }
         }
@@ -327,7 +413,7 @@ void CandidateWindow::OnPaint() {
             SIZE szPage = {};
             GetTextExtentPoint32W(hdc, page, len, &szPage);
             SetTextColor(hdc, colHint);
-            TextOutW(hdc, width_ - 10 - szPage.cx, 8, page, len);
+            TextOutW(hdc, width_ - pad10 - szPage.cx, pad8, page, len);
         }
     }
 
@@ -342,6 +428,10 @@ void CandidateWindow::OnPaint() {
     EndPaint(hwnd_, &ps);
 }
 
+#ifndef WM_DPICHANGED
+#define WM_DPICHANGED 0x02E0
+#endif
+
 LRESULT CALLBACK CandidateWindow::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     CandidateWindow* self = nullptr;
     if (msg == WM_NCCREATE) {
@@ -354,6 +444,19 @@ LRESULT CALLBACK CandidateWindow::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
     switch (msg) {
     case WM_PAINT:
         if (self) self->OnPaint();
+        return 0;
+    case WM_DPICHANGED:
+        if (self) {
+            self->EnsureFont(HIWORD(wp));
+            if (lp) {
+                const RECT* prc = reinterpret_cast<const RECT*>(lp);
+                RECT wa = GetMonitorWorkArea(prc->left, prc->top);
+                self->RecalcSize((wa.right - wa.left) - self->Scale(16));
+                SetWindowPos(hwnd, nullptr, prc->left, prc->top,
+                             self->width_, self->h_, SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            InvalidateRect(hwnd, nullptr, TRUE);
+        }
         return 0;
     case WM_ERASEBKGND:
         return 1;

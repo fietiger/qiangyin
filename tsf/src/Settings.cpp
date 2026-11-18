@@ -35,6 +35,8 @@ void Settings::Load() {
     DWORD c = ReadDword(L"CandidateCount", 10);
     candidateCount = (c >= 5 && c <= 10) ? (int)c : 10; // 选字键最多 0=第10，候选上限 10
     horizontal     = ReadDword(L"Horizontal", 0) != 0;
+    DWORD fs = ReadDword(L"FontSize", 14);
+    fontSize = (fs >= 10 && fs <= 32) ? (int)fs : 14;
 }
 
 bool Settings::Save() const {
@@ -54,6 +56,7 @@ bool Settings::Save() const {
         {L"EngAutoEnPunct",   engAutoEnPunct ? 1u : 0u},
         {L"CandidateCount", static_cast<DWORD>(candidateCount)},
         {L"Horizontal",     horizontal ? 1u : 0u},
+        {L"FontSize",       static_cast<DWORD>(fontSize)},
     };
     for (const auto& kv : vals)
         RegSetValueExW(h, kv.name, 0, REG_DWORD,

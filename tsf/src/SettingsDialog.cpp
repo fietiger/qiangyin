@@ -46,6 +46,17 @@ INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         wchar_t cur[4] = {0};
         wsprintfW(cur, L"%d", s->candidateCount);
         ComboBox_SelectString(cb, -1, cur);
+
+        HWND cbFont = GetDlgItem(h, IDC_FONT_COMBO);
+        static const int kFontSizes[] = { 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28, 32 };
+        int selIdx = 4; // 默认 14pt
+        for (size_t i = 0; i < sizeof(kFontSizes) / sizeof(kFontSizes[0]); ++i) {
+            wchar_t fsStr[12] = {0};
+            wsprintfW(fsStr, L"%d pt", kFontSizes[i]);
+            ComboBox_AddString(cbFont, fsStr);
+            if (kFontSizes[i] == s->fontSize) selIdx = static_cast<int>(i);
+        }
+        ComboBox_SetCurSel(cbFont, selIdx);
         return TRUE; // 焦点给默认按钮
     }
     case WM_COMMAND:
@@ -82,6 +93,14 @@ INT_PTR CALLBACK SettingsDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (n < 5) n = 5;
             if (n > 10) n = 10;
             s->candidateCount = n;
+
+            wchar_t fbuf[16] = {0};
+            GetDlgItemTextW(h, IDC_FONT_COMBO, fbuf, 16);
+            int fs = _wtoi(fbuf); // _wtoi 自动解析前导数字（"14 pt" -> 14）
+            if (fs < 10) fs = 10;
+            if (fs > 32) fs = 32;
+            s->fontSize = fs;
+
             s->Save();
             EndDialog(h, IDOK);
             return TRUE;

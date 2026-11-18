@@ -17,6 +17,7 @@ struct Settings {
     bool engAutoEnPunct = false;   // 切到英文模式时同时关掉中文标点
     int  candidateCount = 10;    // 候选数量（5..10）
     bool horizontal = false;     // 候选窗排列方向：false=竖排（默认），true=横排
+    int  fontSize = 14;          // 候选窗字号（pt，10..32，按屏幕 DPI 自动缩放）
 
     void Load();          // 读注册表，缺失/非法值回落默认
     bool Save() const;    // 写回注册表

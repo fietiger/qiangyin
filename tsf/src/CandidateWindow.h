@@ -23,6 +23,11 @@ public:
     bool Create();
     void Destroy();
     void SetHorizontal(bool horizontal) { horizontal_ = horizontal; }
+    void SetFontSize(int fontSizePt) {
+        if (fontSizePt < 10) fontSizePt = 10;
+        if (fontSizePt > 32) fontSizePt = 32;
+        fontSizePt_ = fontSizePt;
+    }
     // 在屏幕坐标 (x, y) 显示；items 为当前页候选，page/pageCount 为页码（1 起），
     // sel 为页内高亮行/项（0 起，↑/↓ 或 ←/→ 移动；空格上屏高亮项）
     void ShowAt(int x, int y, const std::vector<CandidateItem>& items,
@@ -45,6 +50,8 @@ private:
 
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
     void OnPaint();
+    void EnsureFont(int dpi);
+    int Scale(int dip) const { return MulDiv(dip, dpi_, 96); }
     void RecalcSize(int maxBarWidth);
     // 计算贴输入点的最终位置：默认在输入点下方；下方放不下时翻到上方并
     // 锚定下沿（框体缩小时下移，近边始终不动）
@@ -58,6 +65,9 @@ private:
     int page_ = 1;        // 当前页（1 起）
     int pageCount_ = 1;   // 总页数
     int sel_ = 0;         // 页内高亮行/项（0 起）
+    int fontSizePt_ = 14;     // 用户设置的字号（pt，物理尺寸恒定）
+    int appliedFontPt_ = 0;   // 当前 font_ 对应的字号缓存
+    int dpi_ = 96;            // 当前窗口生效 DPI（随宿主 DPI 感知与目标屏幕自适应）
     int lineHeight_ = 24;
     int width_ = 120;
     int h_ = 60;          // 当前高度（随候选数或行数自适应）

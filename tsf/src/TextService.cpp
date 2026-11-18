@@ -253,6 +253,7 @@ STDMETHODIMP CQiangYinTextService::Activate(ITfThreadMgr* ptim, TfClientId tid) 
     _keyHandler.SetSettings(&settings_);
     _keyHandler.set_full_shape(settings_.fullShape);
     _candWnd.SetHorizontal(settings_.horizontal);
+    _candWnd.SetFontSize(settings_.fontSize);
     if (settings_.alwaysChinese) _keyHandler.set_chinese_mode(true);
 
     ITfSource* pSource = nullptr;
@@ -777,6 +778,7 @@ void CQiangYinTextService::OnLangBarOpenSettings() {
         settings_ = s; // KeyHandler 持有的是本成员的指针，原地生效
         _keyHandler.set_full_shape(settings_.fullShape);
         _candWnd.SetHorizontal(settings_.horizontal);
+        _candWnd.SetFontSize(settings_.fontSize);
         if (settings_.alwaysChinese && !_keyHandler.chinese_mode())
             _keyHandler.SetChineseMode(true);
         if (_composing && _keyHandler.composing())
@@ -1121,6 +1123,7 @@ void CQiangYinTextService::UpdateCandidateWindow(TfEditCookie ec, ITfRange* rang
         qy::log::Write(L"cand pos fallback: center of screen");
     }
     _candWnd.SetHorizontal(settings_.horizontal);
+    _candWnd.SetFontSize(settings_.fontSize);
     if (_candWnd.IsVisible()) {
         _candWnd.Update(x, y, items, _keyHandler.page() + 1, pageCount, _keyHandler.selection());
         QYLOG("cand window Update");
