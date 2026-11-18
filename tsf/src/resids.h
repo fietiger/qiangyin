@@ -39,3 +39,4 @@
 #define IDC_ABOUT_ENGINE    1203
 #define IDC_ABOUT_DESC      1204
 #define IDC_ABOUT_REPO      1205
+#define IDC_ABOUT_USERPATH  1206

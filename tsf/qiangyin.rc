@@ -59,17 +59,18 @@ BEGIN
 END
 
 // 关于对话框
-IDD_ABOUT DIALOGEX 0, 0, 236, 128
+IDD_ABOUT DIALOGEX 0, 0, 268, 138
 STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "关于 强音输入法"
 FONT 9, "Microsoft YaHei UI", 400, 0, 0x1
 BEGIN
     ICON            1, -1, 14, 13, 20, 20
-    LTEXT           "强音输入法", IDC_ABOUT_TITLE, 44, 12, 178, 12
-    LTEXT           "", IDC_ABOUT_VERSION, 44, 27, 178, 10
-    CONTROL         "", -1, "Static", SS_ETCHEDHORZ, 14, 44, 208, 1
-    LTEXT           "", IDC_ABOUT_ENGINE, 14, 52, 208, 20
-    LTEXT           "超强音形输入法现代化实现（Rust 查词引擎 + Windows TSF 框架）\n快捷键：Shift 切中/英 · Shift+空格 全/半角 · Ctrl+. 标点 · Ctrl++ 造词", IDC_ABOUT_DESC, 14, 76, 208, 22
-    PUSHBUTTON      "项目主页(&G)...", IDC_ABOUT_REPO, 14, 105, 66, 14
-    DEFPUSHBUTTON   "确定", IDOK, 176, 105, 46, 14
+    LTEXT           "强音输入法", IDC_ABOUT_TITLE, 44, 11, 210, 14, SS_NOPREFIX
+    LTEXT           "", IDC_ABOUT_VERSION, 44, 27, 210, 11, SS_NOPREFIX
+    CONTROL         "", -1, "Static", SS_ETCHEDHORZ, 14, 44, 240, 1
+    LTEXT           "", IDC_ABOUT_ENGINE, 14, 52, 240, 11, SS_NOPREFIX
+    LTEXT           "", IDC_ABOUT_USERPATH, 14, 66, 240, 11, SS_NOPREFIX | SS_PATHELLIPSIS
+    LTEXT           "超强音形输入法现代化实现（Rust 查词引擎 + Windows TSF 框架）\n快捷键：Shift 切中/英 · Shift+空格 全/半角 · Ctrl+. 标点 · Ctrl++ 造词", IDC_ABOUT_DESC, 14, 83, 240, 24, SS_NOPREFIX
+    DEFPUSHBUTTON   "确定", IDOK, 204, 115, 50, 15
+    PUSHBUTTON      "项目主页...", IDC_ABOUT_REPO, 14, 115, 62, 15
 END

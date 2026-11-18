@@ -2,6 +2,7 @@
 #include "Engine.h"
 #include "resids.h"
 #include <shellapi.h>
+#include <string.h>
 
 #if __has_include("qy_version.h")
 #include "qy_version.h"
@@ -30,6 +31,25 @@ const wchar_t* ArchLabel() {
 #endif
 }
 
+// 把编译器英文 __DATE__（如 "Nov 18 2026"）格式化为中文友好的 "2026-11-18"
+void FormatBuildDate(wchar_t out[16]) {
+    const char* d = __DATE__; // "Mmm dd yyyy"
+    static const char* kMonths[] = {
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    };
+    int mon = 1;
+    for (int i = 0; i < 12; ++i) {
+        if (d[0] == kMonths[i][0] && d[1] == kMonths[i][1] && d[2] == kMonths[i][2]) {
+            mon = i + 1;
+            break;
+        }
+    }
+    int day = (d[4] == ' ' ? 0 : (d[4] - '0') * 10) + (d[5] - '0');
+    int year = (d[7] - '0') * 1000 + (d[8] - '0') * 100 + (d[9] - '0') * 10 + (d[10] - '0');
+    wsprintfW(out, L"%04d-%02d-%02d", year, mon, day);
+}
+
 INT_PTR CALLBACK AboutDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     AboutState* st = reinterpret_cast<AboutState*>(GetWindowLongPtrW(h, GWLP_USERDATA));
     switch (msg) {
@@ -50,24 +70,30 @@ INT_PTR CALLBACK AboutDlgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             }
         }
 
+        wchar_t buildDate[16] = {0};
+        FormatBuildDate(buildDate);
         wchar_t verLine[160] = {0};
-        wsprintfW(verLine, L"版本：%s  ·  %s  ·  %S",
-                  QY_VERSION_WSTR, ArchLabel(), __DATE__);
+        wsprintfW(verLine, L"版本：%s  ·  %s  ·  %s",
+                  QY_VERSION_WSTR, ArchLabel(), buildDate);
         SetDlgItemTextW(h, IDC_ABOUT_VERSION, verLine);
+
+        wchar_t engLine[128] = {0};
+        if (st && st->dictCount > 0) {
+            wsprintfW(engLine, L"词库状态：已加载 %lu 条词条",
+                      static_cast<unsigned long>(st->dictCount));
+        } else {
+            lstrcpyW(engLine, L"词库状态：就绪（首次输入时自动载入）");
+        }
+        SetDlgItemTextW(h, IDC_ABOUT_ENGINE, engLine);
 
         std::wstring userPath = Engine::UserTablePath();
         if (userPath.empty()) userPath = L"%APPDATA%\\QiangYin\\usercode.txt";
+        std::wstring pathLine = L"用户词库：" + userPath;
+        SetDlgItemTextW(h, IDC_ABOUT_USERPATH, pathLine.c_str());
 
-        wchar_t engLine[512] = {0};
-        if (st && st->dictCount > 0) {
-            wsprintfW(engLine, L"词库状态：已加载 %lu 条词条\n用户词库：%s",
-                      static_cast<unsigned long>(st->dictCount), userPath.c_str());
-        } else {
-            wsprintfW(engLine, L"词库状态：就绪（首次输入时自动载入）\n用户词库：%s",
-                      userPath.c_str());
-        }
-        SetDlgItemTextW(h, IDC_ABOUT_ENGINE, engLine);
-        return TRUE;
+        // 默认焦点明确给「确定」按钮（按回车直接关闭，避免落在「项目主页」上）
+        SetFocus(GetDlgItem(h, IDOK));
+        return FALSE;
     }
     case WM_COMMAND:
         switch (LOWORD(wp)) {
